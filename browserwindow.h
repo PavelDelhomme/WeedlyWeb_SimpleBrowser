@@ -58,6 +58,8 @@ private slots:
     void handleFavActionTriggered();
     void showFavoritesManager();
     void saveFavoritesFromTree(QTreeWidget *tree);
+    void updateFavoriteIcon(const QUrl &url);
+
 
 private:
     QMenu *createFileMenu(TabWidget *tabWidget);
@@ -87,6 +89,8 @@ private:
     QAction *m_moreFavoritesAction = nullptr;
     QMenu *m_favoritesMenu = nullptr;
     QVector<QPair<QString, QString>> m_favorites;
+
+    bool isFavorite(const QUrl &url);
 
     // Fonctions
     void setupFavoritesBar();

@@ -8,6 +8,7 @@
 #include <QMenu>
 #include <QTabBar>
 #include <QWebEngineProfile>
+#include <QInputDialog>
 
 using namespace Qt::StringLiterals;
 
@@ -80,30 +81,18 @@ void TabWidget::handleContextMenuRequested(const QPoint &pos)
 #endif
     int index = tabBar()->tabAt(pos);
     if (index != -1) {
-        QAction *action = menu.addAction(tr("Clone Tab"));
-        connect(action, &QAction::triggered, this, [this,index]() {
-            cloneTab(index);
-        });
         menu.addSeparator();
-        action = menu.addAction(tr("&Close Tab"));
-        action->setShortcut(QKeySequence::Close);
-        connect(action, &QAction::triggered, this, [this,index]() {
-            closeTab(index);
-        });
-        action = menu.addAction(tr("Close &Other Tabs"));
-        connect(action, &QAction::triggered, this, [this,index]() {
-            closeOtherTabs(index);
-        });
-        menu.addSeparator();
-        action = menu.addAction(tr("Reload Tab"));
-        action->setShortcut(QKeySequence::Refresh);
-        connect(action, &QAction::triggered, this, [this,index]() {
-            reloadTab(index);
-        });
-    } else {
-        menu.addSeparator();
+        QAction *createGroupAction = menu.addAction(tr("Créer un groupe"));
+        connect(createGroupAction, &QAction::triggered, this, &TabWidget::createTabGroup);
+
+
+        if (!tabBar()->tabData(index).isNull()) {
+            QAction *removeFromGroupAction = menu.addAction(tr("Retirer du groupe"));
+            connect(removeFromGroupAction, &QAction::triggered, this, [this, index]() {
+                removeFromGroup(index);
+            });
+        }
     }
-    menu.addAction(tr("Reload All Tabs"), this, &TabWidget::reloadAllTabs);
     menu.exec(QCursor::pos());
 }
 
@@ -263,3 +252,33 @@ void TabWidget::reloadTab(int index)
     if (WebView *view = webView(index))
         view->reload();
 }
+
+void TabWidget::createTabGroup()
+{
+    QInputDialog dialog(this);
+    dialog.setWindowTitle(tr("Créer un groupe d'onglets"));
+    dialog.setLabelText(tr("Nom du groupe :"));
+    dialog.setInputMode(QInputDialog::TextInput);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        QString groupName = dialog.textValue();
+        if (!groupName.isEmpty()) {
+            int currentIndex = this->currentIndex();
+            tabBar()->setTabTextColor(currentIndex, QColor(Qt::blue));
+            tabBar()->setTabData(currentIndex, groupName);
+        }
+    }
+}
+
+void TabWidget::addToGroup(int index, const QString &groupName)
+{
+    tabBar()->setTabTextColor(index, QColor(Qt::blue));
+    tabBar()->setTabData(index, groupName);
+}
+
+void TabWidget::removeFromGroup(int index)
+{
+    tabBar()->setTabTextColor(index, QColor());
+    tabBar()->setTabData(index, QVariant());
+}
+

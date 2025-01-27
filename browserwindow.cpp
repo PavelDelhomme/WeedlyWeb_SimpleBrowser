@@ -90,6 +90,7 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
 
     if (m_tabWidget) {
         connect(m_tabWidget, &TabWidget::titleChanged, this, &BrowserWindow::handleWebViewTitleChanged);
+        connect(m_tabWidget, &TabWidget::urlChanged, this, &BrowserWindow::updateFavoriteIcon);
     }
 
     if (!forDevTools) {
@@ -396,11 +397,11 @@ QToolBar *BrowserWindow::createToolBar()
             &m_browser->downloadManagerWidget(), &QWidget::show);
 
     // Bouton "Favoris'
-    auto favoritesAction = new QAction(this);
-    favoritesAction->setIcon(QIcon(":/star-regular.png"));
-    favoritesAction->setToolTip(tr("Gérer les favoris"));
-    navigationBar->addAction(favoritesAction);
-    connect(favoritesAction, &QAction::triggered, this, &BrowserWindow::handleFavActionTriggered);
+    auto m_favAction = new QAction(this);
+    m_favAction->setIcon(QIcon(":/star-regular.png"));
+    m_favAction->setToolTip(tr("Ajouter/Supprimer des favoris"));
+    navigationBar->addAction(m_favAction);
+    connect(m_favAction, &QAction::triggered, this, &BrowserWindow::handleFavActionTriggered);
 
     // Bouton "Paramètres"
     m_settingsMenu = new QMenu(tr("Paramètres"), this);
@@ -811,28 +812,13 @@ void BrowserWindow::handleFavActionTriggered()
         QUrl currentUrl = webView->url();
         QString currentTitle = webView->title();
 
-        // Vérifier si le favori existe déjà
-        bool favoriteExists = false;
-        QFile file("favorites.json");
-        if (file.open(QIODevice::ReadOnly)) {
-            QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-            QJsonArray favoritesArray = doc.array();
-            for (const QJsonValue &value : favoritesArray) {
-                QJsonObject obj = value.toObject();
-                if (obj["url"].toString() == currentUrl.toString()) {
-                    favoriteExists = true;
-                    break;
-                }
-            }
-            file.close();
-        }
-
-        if (favoriteExists) {
+        if (isFavorite(currentUrl)) {
             int ret = QMessageBox::question(this, tr("Supprimer le favori"),
-                                                  tr("Voulez-vous vraiment supprimer ce favori ?"),
+                                            tr("Voulez-vous vraiment supprimer ce favori ?"),
                                             QMessageBox::Yes | QMessageBox::No);
-            if (ret == QMessageBox::Yes)  {
+            if (ret == QMessageBox::Yes) {
                 deleteFavorite(currentUrl);
+                m_favAction->setIcon(QIcon(":/star-regular.png"));
             }
         } else {
             bool ok;
@@ -841,11 +827,30 @@ void BrowserWindow::handleFavActionTriggered()
                                                  currentTitle, &ok);
             if (ok && !name.isEmpty()) {
                 addFavorite(name, currentUrl.toString());
-                QMessageBox::information(this, tr("Favoris"), tr("Ajouté aux favoris :\n%1").arg(name));
+                m_favAction->setIcon(QIcon(":/star-solid.png"));
             }
         }
     }
 }
+
+
+bool BrowserWindow::isFavorite(const QUrl &url)
+{
+    QFile file("favorites.json");
+    if (file.open(QIODevice::ReadOnly)) {
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        QJsonArray favoritesArray = doc.array();
+        file.close();
+
+        for (const QJsonValue &value : favoritesArray) {
+            if (value.toObject()["url"].toString() == url.toString()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 
 void BrowserWindow::deleteFavorite(const QUrl &url)
 {
@@ -1068,4 +1073,11 @@ void BrowserWindow::saveFavoritesFromTree(QTreeWidget *tree)
         file.write(QJsonDocument(favoritesArray).toJson());
         file.close();
     }
+}
+
+
+void BrowserWindow::updateFavoriteIcon(const QUrl &url)
+{
+    bool isFav = isFavorite(url);
+    m_favAction->setIcon(QIcon(isFav ? ":/star-solid.png" : ":/star-regular.png"));
 }

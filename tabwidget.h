@@ -44,6 +44,9 @@ public slots:
     void closeTab(int index);
     void nextTab();
     void previousTab();
+    void createTabGroup();
+    void addToGroup(int index, const QString &groupName);
+    void removeFromGroup(int index);
 
 private slots:
     void handleCurrentChanged(int index);

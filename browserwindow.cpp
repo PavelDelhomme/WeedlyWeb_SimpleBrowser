@@ -20,6 +20,9 @@
 #include <QVBoxLayout>
 #include <QWebEngineFindTextResult>
 #include <QWebEngineProfile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 using namespace Qt::StringLiterals;
 
@@ -27,6 +30,9 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     : m_browser(browser)
     , m_profile(profile)
     , m_tabWidget(new TabWidget(profile, this))
+    , m_favoritesBar(new QToolBar(tr("Favoris"), this))  // Initialisation de la barre de favoris
+    , m_progressBar(new QProgressBar(this))  // Initialisation de la barre de progression
+    , m_toolbar(createToolBar())  // Initialisation de la barre de navigation
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setFocusPolicy(Qt::ClickFocus);
@@ -34,11 +40,22 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     if (!forDevTools) {
         m_progressBar = new QProgressBar(this);
 
-        QToolBar *toolbar = createToolBar();
-        addToolBar(toolbar);
+        // QToolBar *toolbar = createToolBar();
+        // addToolBar(toolbar);
+        addToolBar(m_toolbar);
+
+        // Barre de favoris ajoutée avant les onglets
+        //m_favoritesBar = new QToolBar(tr("Favris"));
+        m_favoritesBar->setMovable(false);
+        //addToolBar(m_favoritesBar);
+
+        setupFavoritesBar();
+        loadFavoritesToBar();
+
         menuBar()->addMenu(createFileMenu(m_tabWidget));
         menuBar()->addMenu(createEditMenu());
-        menuBar()->addMenu(createViewMenu(toolbar));
+        //menuBar()->addMenu(createViewMenu(toolbar));
+        menuBar()->addMenu(createViewMenu(m_toolbar));
         menuBar()->addMenu(createWindowMenu(m_tabWidget));
         menuBar()->addMenu(createHelpMenu());
     }
@@ -56,6 +73,10 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
 
         layout->addWidget(m_progressBar);
     }
+
+    layout->addWidget(m_toolbar);
+
+    layout->addWidget(m_favoritesBar);
 
     layout->addWidget(m_tabWidget);
     centralWidget->setLayout(layout);
@@ -314,6 +335,7 @@ QToolBar *BrowserWindow::createToolBar()
     navigationBar->setMovable(false);
     navigationBar->toggleViewAction()->setEnabled(false);
 
+    // Bouton "Retour"
     m_historyBackAction = new QAction(this);
     auto backShortcuts = removeBackspace(QKeySequence::keyBindings(QKeySequence::Back));
     // For some reason Qt doesn't bind the dedicated Back key to Back.
@@ -328,6 +350,7 @@ QToolBar *BrowserWindow::createToolBar()
     });
     navigationBar->addAction(m_historyBackAction);
 
+    // Bouton "Suivant"
     m_historyForwardAction = new QAction(this);
     auto fwdShortcuts = removeBackspace(QKeySequence::keyBindings(QKeySequence::Forward));
     fwdShortcuts.append(QKeySequence(Qt::Key_Forward));
@@ -341,24 +364,56 @@ QToolBar *BrowserWindow::createToolBar()
     });
     navigationBar->addAction(m_historyForwardAction);
 
+    // Bouton "Reload"
     m_stopReloadAction = new QAction(this);
     connect(m_stopReloadAction, &QAction::triggered, [this]() {
         m_tabWidget->triggerWebPageAction(QWebEnginePage::WebAction(m_stopReloadAction->data().toInt()));
     });
     navigationBar->addAction(m_stopReloadAction);
 
+    // Barre URL
     m_urlLineEdit = new QLineEdit(this);
-    m_favAction = new QAction(this);
-    m_urlLineEdit->addAction(m_favAction, QLineEdit::LeadingPosition);
     m_urlLineEdit->setClearButtonEnabled(true);
     navigationBar->addWidget(m_urlLineEdit);
 
+    // Bouton action Favoris
+    //m_favAction = new QAction(this);
+    //m_urlLineEdit->addAction(m_favAction, QLineEdit::LeadingPosition);
+
+    // Bouton "Ajouter aux favoris"
+    m_favAction = new QAction(QIcon(":/icons/favorite.png"), tr("Ajouter aux favoris"), this);
+    connect(m_favAction, &QAction::triggered, [this]() {
+        QUrl currentUrl = m_tabWidget->currentWebView()->url();
+        QString title = m_tabWidget->currentWebView()->title();
+        saveFavorite(currentUrl, title);
+        QMessageBox::information(this, tr("Favoris"), tr("Ajouté aux favoris :\n%1").arg(title));
+    });
+    navigationBar->addAction(m_favAction);
+
+    // Bouton "Téléchargements"
     auto downloadsAction = new QAction(this);
     downloadsAction->setIcon(QIcon(u":go-bottom.png"_s));
     downloadsAction->setToolTip(tr("Show downloads"));
     navigationBar->addAction(downloadsAction);
     connect(downloadsAction, &QAction::triggered,
             &m_browser->downloadManagerWidget(), &QWidget::show);
+
+    // Bouton "Paramètres"
+    m_settingsMenu = new QMenu(tr("Paramètres"), this);
+    m_settingsMenu->addAction(tr("Préférences"), this, []() {
+        QMessageBox::information(nullptr, tr("Paramètres"), tr("Ouvrir les préférences"));
+    });
+    m_settingsMenu->addAction(tr("Extensions"), this, []() {
+        QMessageBox::information(nullptr, tr("Extensions"), tr("Gérer les extensions"));
+    });
+    m_settingsMenu->addAction(tr("À propos"), this, []() {
+        QMessageBox::information(nullptr, tr("À propos"), tr("Version 1.0 de WeedlyWeb"));
+    });
+
+    m_settingsAction = new QAction(QIcon(":/icons/settings.png"), tr("Paramètres"), this);
+    m_settingsAction->setMenu(m_settingsMenu);
+    navigationBar->addAction(m_settingsAction);
+
 
     return navigationBar;
 }
@@ -501,4 +556,114 @@ void BrowserWindow::handleFindTextFinished(const QWebEngineFindTextResult &resul
                                                                QString::number(result.activeMatch()),
                                                                QString::number(result.numberOfMatches())));
     }
+}
+
+
+void BrowserWindow::saveFavorite(const QUrl &url, const QString &title)
+{
+    QFile file("favorites.json");
+
+    QJsonArray favoritesArray;
+    if (file.open(QIODevice::ReadOnly)) {
+        QJsonDocument loadDoc = QJsonDocument::fromJson(file.readAll());
+        favoritesArray = loadDoc.array();
+        file.close();
+    }
+
+    // Vérificiation pour éviter les doublons
+    for (const QJsonValue &value : favoritesArray) {
+        if (value.toObject().value("url").toString() == url.toString()) {
+            QMessageBox::information(this, tr("Favoris"), tr("Ce favori existe déjà."));
+            return;
+        }
+    }
+
+    // Ajouter le nouvel élément
+    QJsonObject newFavorite;
+    newFavorite["title"] = title;
+    newFavorite["url"] = url.toString();
+    favoritesArray.append(newFavorite);
+
+    // Sauvegarde dans le fichier JSON
+    if (file.open(QIODevice::WriteOnly)) {
+        QJsonDocument saveDoc(favoritesArray);
+        file.write(saveDoc.toJson());
+        file.close();
+    }
+}
+
+
+void BrowserWindow::loadFavorites()
+{
+    QFile file("favorites.json");
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    QJsonArray favoritesArray = doc.array();
+
+    for (const QJsonValue &value : favoritesArray) {
+        QJsonObject obj = value.toObject();
+        qDebug() << "Favori chargé:" << obj["title"].toString() << obj["url"].toString();
+    }
+    file.close();
+}
+
+
+void BrowserWindow::setupFavoritesBar() {
+    m_favoritesBar->clear();
+    m_favoritesBar->setMovable(false);
+
+    // Ajouter un bouton "Voir plus" pour les favoris excédentaires
+    m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
+    connect(m_moreFavoritesAction, &QAction::triggered, this, [this]() {
+        QMessageBox::information(this, tr("Favoris"), tr("Afficher la liste complète des favoris."));
+    });
+
+    m_favoritesBar->addAction(m_moreFavoritesAction);
+}
+
+
+void BrowserWindow::loadFavoritesToBar()
+{
+    QFile file("favorites.json");
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    QJsonArray favoritesArray = doc.array();
+    file.close();
+
+    m_favoritesBar->clear();
+    int maxVisibleFavorites = 5;  // Maximum de favoris affichés dans la barre
+    int count = 0;
+
+    for (const QJsonValue &value : favoritesArray) {
+        QJsonObject obj = value.toObject();
+        QString title = obj["title"].toString();
+        QUrl url = QUrl(obj["url"].toString());
+
+        QAction *favAction = new QAction(QIcon(":/icons/star.png"), title, this);
+        connect(favAction, &QAction::triggered, this, [this, url]() {
+            openFavorite(url);
+        });
+
+        m_favoritesBar->addAction(favAction);
+        count++;
+
+        if (count >= maxVisibleFavorites) {
+            break;
+        }
+    }
+
+    if (favoritesArray.size() > maxVisibleFavorites) {
+        m_favoritesBar->addAction(m_moreFavoritesAction);
+    }
+}
+
+void BrowserWindow::openFavorite(const QUrl &url)
+{
+    m_tabWidget->setUrl(url);
+    m_urlLineEdit->setText(url.toString());
 }

@@ -65,6 +65,18 @@ private:
     QLineEdit *m_urlLineEdit = nullptr;
     QAction *m_favAction = nullptr;
     QString m_lastSearch;
+    QMenu *m_settingsMenu = nullptr;
+    QAction *m_settingsAction = nullptr;
+    QToolBar *m_toolbar = nullptr;
+    QToolBar *m_favoritesBar = nullptr;
+    QAction *m_moreFavoritesAction = nullptr;
+
+    // Fonctions
+    void setupFavoritesBar();
+    void loadFavoritesToBar();
+    void openFavorite(const QUrl &url);
+    void saveFavorite(const QUrl &url, const QString &title);
+    void loadFavorites();
 };
 
 #endif // BROWSERWINDOW_H

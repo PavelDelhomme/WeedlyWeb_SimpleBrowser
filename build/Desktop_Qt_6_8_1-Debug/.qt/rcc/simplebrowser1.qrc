@@ -1,0 +1,13 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="dialog-error.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/dialog-error.png</file>
+    <file alias="edit-clear.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/edit-clear.png</file>
+    <file alias="go-bottom.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/go-bottom.png</file>
+    <file alias="go-next.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/go-next.png</file>
+    <file alias="go-previous.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/go-previous.png</file>
+    <file alias="process-stop.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/process-stop.png</file>
+    <file alias="text-html.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/text-html.png</file>
+    <file alias="view-refresh.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/3rdparty/view-refresh.png</file>
+  </qresource>
+</RCC>
+

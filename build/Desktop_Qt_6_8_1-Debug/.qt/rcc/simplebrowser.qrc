@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="AppLogoColor.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/AppLogoColor.png</file>
+    <file alias="ninja.png">/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/data/ninja.png</file>
+  </qresource>
+</RCC>
+

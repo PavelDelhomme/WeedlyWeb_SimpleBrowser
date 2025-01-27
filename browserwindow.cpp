@@ -662,30 +662,36 @@ void BrowserWindow::loadFavoritesToBar()
             openFavorite(url);
         });
 
-        // Ajouter un menu contextuel
-        QMenu *contextMenu = new QMenu(this);
-        QAction *editAction = contextMenu->addAction(tr("Modifier le favori"));
-        QAction *deleteAction = contextMenu->addAction(tr("Supprimer le favori"));
-
-        connect(editAction, &QAction::triggered, this, [this, title, url]() {
-            editFavorite(title, url);
+        favAction->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(favAction, &QAction::customContextMenuRequested, this, [this, title, url](const QPoint &pos) {
+            showFavoriteContextMenu(pos, title, url);
         });
-        connect(deleteAction, &QAction::triggered, this, [this, url]() {
-            deleteFavorite(url);
-        });
-
-        favAction->setMenu(contextMenu);
-
-        QFontMetrics fm(m_favoritesBar->font());
-        int actionWidth = fm.horizontalAdvance(title) + 32; // 32 pour l'icône et la marge
-
-        if (usedWidth + actionWidth > availableWidth) {
-            m_favoritesBar->addAction(m_moreFavoritesAction);
-            break;
-        }
 
         m_favoritesBar->addAction(favAction);
-        usedWidth += actionWidth;
+        // // Ajouter un menu contextuel
+        // QMenu *contextMenu = new QMenu(this);
+        // QAction *editAction = contextMenu->addAction(tr("Modifier le favori"));
+        // QAction *deleteAction = contextMenu->addAction(tr("Supprimer le favori"));
+
+        // connect(editAction, &QAction::triggered, this, [this, title, url]() {
+        //     editFavorite(title, url);
+        // });
+        // connect(deleteAction, &QAction::triggered, this, [this, url]() {
+        //     deleteFavorite(url);
+        // });
+
+        // favAction->setMenu(contextMenu);
+
+        // QFontMetrics fm(m_favoritesBar->font());
+        // int actionWidth = fm.horizontalAdvance(title) + 32; // 32 pour l'icône et la marge
+
+        // if (usedWidth + actionWidth > availableWidth) {
+        //     m_favoritesBar->addAction(m_moreFavoritesAction);
+        //     break;
+        // }
+
+        // m_favoritesBar->addAction(favAction);
+        //usedWidth += actionWidth;
     }
 }
 
@@ -719,19 +725,20 @@ void BrowserWindow::loadFavoritesToBarRecursive(const QJsonArray& array, QWidget
     }
 }
 
-void BrowserWindow::showFavoriteContextMenu(QAction *action, const QString &title, const QUrl &url)
+void BrowserWindow::showFavoriteContextMenu(const QPoint &pos, const QString &title, const QUrl &url)
 {
     QMenu contextMenu(this);
     QAction *editAction = contextMenu.addAction(tr("Modifier le favori"));
     QAction *deleteAction = contextMenu.addAction(tr("Supprimer le favori"));
 
-    QAction *selectedAction = contextMenu.exec(QCursor::pos());
+    QAction *selectedAction = contextMenu.exec(m_favoritesBar->mapToGlobal(pos));
     if (selectedAction == editAction) {
         editFavorite(title, url);
     } else if (selectedAction == deleteAction) {
         deleteFavorite(url);
     }
 }
+
 
 
 void BrowserWindow::editFavorite(const QString &oldTitle, const QUrl &oldUrl)

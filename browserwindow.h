@@ -101,7 +101,7 @@ private:
 
     void deleteFavorite(const QUrl &url);
     void updateFavorite(const QUrl &oldUrl, const QString &newTitle, const QUrl &newUrl, const QString &newFolder);
-    void showFavoriteContextMenu(QAction *action, const QString &title, const QUrl &url);
+    void showFavoriteContextMenu(const QPoint &pos, const QString &title, const QUrl &url);
     void editFavorite(const QString &oldTitle, const QUrl &oldUrl);
     QString saveFavicon(const QByteArray &data, const QUrl &url);
     void updateFaviconForFavorite(const QUrl &url, const QString &faviconPath);

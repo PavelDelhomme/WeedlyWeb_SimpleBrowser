@@ -1,0 +1,12 @@
+-rootPath
+/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser
+-cmake-output
+-output-file
+/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/build/Desktop_Qt_6_8_1-Debug/.qt/qml_imports/simplebrowser_conf.cmake
+-importPath
+/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/build/Desktop_Qt_6_8_1-Debug
+-importPath
+/home/pactivisme/Qt/6.8.1/gcc_64/qml
+-qrcFiles
+/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/build/Desktop_Qt_6_8_1-Debug/.qt/rcc/simplebrowser.qrc
+/home/pactivisme/Qt/Examples/Qt-6.8.1/webenginewidgets/simplebrowser/build/Desktop_Qt_6_8_1-Debug/.qt/rcc/simplebrowser1.qrc

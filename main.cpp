@@ -23,6 +23,8 @@ QUrl commandLineUrlArgument()
 
 int main(int argc, char **argv)
 {
+    qputenv("QT_LOGGING_RULES", "qt.webenginecontext.debug=true");
+
     QCoreApplication::setOrganizationName("QtExamples");
 
     QApplication app(argc, argv);

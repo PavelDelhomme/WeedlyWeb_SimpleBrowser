@@ -32,12 +32,15 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     : m_browser(browser)
     , m_profile(profile)
     , m_tabWidget(new TabWidget(profile, this))
+    , m_toolbar(createToolBar())
     , m_favoritesBar(new QToolBar(tr("Favoris"), this))  // Initialisation de la barre de favoris
     , m_progressBar(new QProgressBar(this))  // Initialisation de la barre de progression
-    , m_toolbar(createToolBar())  // Initialisation de la barre de navigation
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setFocusPolicy(Qt::ClickFocus);
+    //QToolBar *toolbar = createToolBar();
+    //addToolBar(toolbar);
+
 
     if (!forDevTools) {
         m_progressBar = new QProgressBar(this);
@@ -85,12 +88,17 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     centralWidget->setLayout(layout);
     setCentralWidget(centralWidget);
 
-    connect(m_tabWidget, &TabWidget::titleChanged, this, &BrowserWindow::handleWebViewTitleChanged);
+    if (m_tabWidget) {
+        connect(m_tabWidget, &TabWidget::titleChanged, this, &BrowserWindow::handleWebViewTitleChanged);
+    }
+
     if (!forDevTools) {
-        connect(m_tabWidget, &TabWidget::linkHovered, [this](const QString& url) {
-            statusBar()->showMessage(url);
-        });
-        connect(m_tabWidget, &TabWidget::loadProgress, this, &BrowserWindow::handleWebViewLoadProgress);
+        if (m_tabWidget) {
+            connect(m_tabWidget, &TabWidget::linkHovered, [this](const QString& url) {
+                statusBar()->showMessage(url);
+            });
+            connect(m_tabWidget, &TabWidget::loadProgress, this, &BrowserWindow::handleWebViewLoadProgress);
+        }
         connect(m_tabWidget, &TabWidget::webActionEnabledChanged, this, &BrowserWindow::handleWebActionEnabledChanged);
         connect(m_tabWidget, &TabWidget::urlChanged, [this](const QUrl &url) {
             m_urlLineEdit->setText(url.toDisplayString());

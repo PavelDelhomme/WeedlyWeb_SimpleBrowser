@@ -32,12 +32,20 @@ BrowserWindow *Browser::createHiddenWindow(bool offTheRecord)
                          &m_downloadManagerWidget, &DownloadManagerWidget::downloadRequested);
     }
     auto profile = !offTheRecord ? m_profile.get() : QWebEngineProfile::defaultProfile();
-    auto mainWindow = new BrowserWindow(this, profile, false);
-    profile->setPersistentPermissionsPolicy(QWebEngineProfile::PersistentPermissionsPolicy::AskEveryTime);
-    m_windows.append(mainWindow);
-    QObject::connect(mainWindow, &QObject::destroyed, [this, mainWindow]() {
-        m_windows.removeOne(mainWindow);
-    });
+    BrowserWindow *mainWindow = nullptr;
+    try {
+        mainWindow = new BrowserWindow(this, profile, false);
+        if (mainWindow) {
+            profile->setPersistentPermissionsPolicy(QWebEngineProfile::PersistentPermissionsPolicy::AskEveryTime);
+            m_windows.append(mainWindow);
+            QObject::connect(mainWindow, &QObject::destroyed, [this, mainWindow]() {
+                m_windows.removeOne(mainWindow);
+            });
+        }
+    } catch (const std::exception& e) {
+        qDebug() << "Exception lors de la création de BrowserWindow:" << e.what();
+    }
+
     return mainWindow;
 }
 

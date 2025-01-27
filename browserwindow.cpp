@@ -387,15 +387,6 @@ QToolBar *BrowserWindow::createToolBar()
     m_urlLineEdit->setClearButtonEnabled(true);
     navigationBar->addWidget(m_urlLineEdit);
 
-    // Bouton "Ajouter aux favoris"
-    // connect(m_favAction, &QAction::triggered, [this]() {
-    //     QUrl currentUrl = m_tabWidget->currentWebView()->url();
-    //     QString title = m_tabWidget->currentWebView()->title();
-    //     saveFavorite(currentUrl, title);
-    //     QMessageBox::information(this, tr("Favoris"), tr("Ajouté aux favoris :\n%1").arg(title));
-    // });
-    //navigationBar->addAction(m_favAction);
-
     // Bouton "Téléchargements"
     auto downloadsAction = new QAction(this);
     downloadsAction->setIcon(QIcon(u":go-bottom.png"_s));
@@ -404,9 +395,15 @@ QToolBar *BrowserWindow::createToolBar()
     connect(downloadsAction, &QAction::triggered,
             &m_browser->downloadManagerWidget(), &QWidget::show);
 
+    // Bouton "Favoris'
+    auto favoritesAction = new QAction(this);
+    favoritesAction->setIcon(QIcon(":/star-regular.png"));
+    favoritesAction->setToolTip(tr("Gérer les favoris"));
+    navigationBar->addAction(favoritesAction);
+    connect(favoritesAction, &QAction::triggered, this, &BrowserWindow::handleFavActionTriggered);
+
     // Bouton "Paramètres"
     m_settingsMenu = new QMenu(tr("Paramètres"), this);
-    m_settingsMenu->addAction(tr("Ajouter aux favoris"), this, &BrowserWindow::handleFavActionTriggered);
     m_settingsMenu->addSeparator();
     m_settingsMenu->addAction(tr("Préférences"), this, []() {
         QMessageBox::information(nullptr, tr("Paramètres"), tr("Ouvrir les préférences"));
@@ -645,8 +642,6 @@ void BrowserWindow::loadFavoritesToBar()
     file.close();
 
     m_favoritesBar->clear();
-    int availableWidth = m_favoritesBar->width();
-    int usedWidth = 0;
 
     for (const QJsonValue &value : favoritesArray) {
         QJsonObject obj = value.toObject();
@@ -662,36 +657,21 @@ void BrowserWindow::loadFavoritesToBar()
             openFavorite(url);
         });
 
-        favAction->setContextMenuPolicy(Qt::CustomContextMenu);
-        connect(favAction, &QAction::customContextMenuRequested, this, [this, title, url](const QPoint &pos) {
-            showFavoriteContextMenu(pos, title, url);
+        // Créer un menu contextuel pour l'action
+        QMenu *contextMenu = new QMenu(this);
+        QAction *editAction = contextMenu->addAction(tr("Modifier le favori"));
+        QAction *deleteAction = contextMenu->addAction(tr("Supprimer le favori"));
+
+        connect(editAction, &QAction::triggered, this, [this, title, url] (){
+            editFavorite(title, url);
+        });
+        connect(deleteAction, &QAction::triggered, this, [this, url]() {
+            deleteFavorite(url);
         });
 
+        favAction->setMenu(contextMenu);
+
         m_favoritesBar->addAction(favAction);
-        // // Ajouter un menu contextuel
-        // QMenu *contextMenu = new QMenu(this);
-        // QAction *editAction = contextMenu->addAction(tr("Modifier le favori"));
-        // QAction *deleteAction = contextMenu->addAction(tr("Supprimer le favori"));
-
-        // connect(editAction, &QAction::triggered, this, [this, title, url]() {
-        //     editFavorite(title, url);
-        // });
-        // connect(deleteAction, &QAction::triggered, this, [this, url]() {
-        //     deleteFavorite(url);
-        // });
-
-        // favAction->setMenu(contextMenu);
-
-        // QFontMetrics fm(m_favoritesBar->font());
-        // int actionWidth = fm.horizontalAdvance(title) + 32; // 32 pour l'icône et la marge
-
-        // if (usedWidth + actionWidth > availableWidth) {
-        //     m_favoritesBar->addAction(m_moreFavoritesAction);
-        //     break;
-        // }
-
-        // m_favoritesBar->addAction(favAction);
-        //usedWidth += actionWidth;
     }
 }
 
@@ -848,7 +828,12 @@ void BrowserWindow::handleFavActionTriggered()
         }
 
         if (favoriteExists) {
-            QMessageBox::information(this, tr("Favoris"), tr("Cette page est déjà dans vos favoris."));
+            int ret = QMessageBox::question(this, tr("Supprimer le favori"),
+                                                  tr("Voulez-vous vraiment supprimer ce favori ?"),
+                                            QMessageBox::Yes | QMessageBox::No);
+            if (ret == QMessageBox::Yes)  {
+                deleteFavorite(currentUrl);
+            }
         } else {
             bool ok;
             QString name = QInputDialog::getText(this, tr("Ajouter aux favoris"),

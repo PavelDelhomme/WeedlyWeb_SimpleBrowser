@@ -74,6 +74,8 @@ set(simplebrowser1_resource_files
     "data/3rdparty/process-stop.png"
     "data/3rdparty/text-html.png"
     "data/3rdparty/view-refresh.png"
+    "data/3rdparty/star-regular.png"
+    "data/3rdparty/star-solid.png"
 )
 
 qt_add_resources(simplebrowser "simplebrowser1"

@@ -2,6 +2,7 @@
 #include "EWIEGA46WW/moc_browserwindow.cpp"
 #include "EWIEGA46WW/moc_downloadmanagerwidget.cpp"
 #include "EWIEGA46WW/moc_downloadwidget.cpp"
+#include "EWIEGA46WW/moc_favoritesmanager.cpp"
 #include "EWIEGA46WW/moc_tabwidget.cpp"
 #include "EWIEGA46WW/moc_webauthdialog.cpp"
 #include "EWIEGA46WW/moc_webpage.cpp"

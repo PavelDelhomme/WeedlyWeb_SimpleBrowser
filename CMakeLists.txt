@@ -13,7 +13,7 @@ endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/webenginewidgets/simplebrowser")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui WebEngineWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets WebEngineWidgets Network)
 
 qt_add_executable(simplebrowser
     browser.cpp browser.h
@@ -29,6 +29,8 @@ qt_add_executable(simplebrowser
     webview.cpp webview.h
     webauthdialog.cpp webauthdialog.h webauthdialog.ui
     favoritesmanager.h favoritesmanager.cpp
+    commandwidget.cpp commandwidget.h
+    requestinterceptor.cpp requestinterceptor.h
 )
 
 if(WIN32)

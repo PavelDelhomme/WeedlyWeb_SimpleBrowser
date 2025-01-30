@@ -282,3 +282,14 @@ void TabWidget::removeFromGroup(int index)
     tabBar()->setTabData(index, QVariant());
 }
 
+
+void TabWidget::handleWebViewTitleChanged(const QString &title)
+{
+    WebView *view = qobject_cast<WebView*>(sender());
+    if (view) {
+        int index = indexOf(view);
+        QString shortTitle = title.length() > 30 ? title.left(17) + "..." : title;
+        setTabText(index, shortTitle);
+        setTabToolTip(index, title);
+    }
+}

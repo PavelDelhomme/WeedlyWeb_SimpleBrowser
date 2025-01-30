@@ -41,6 +41,7 @@ BrowserWindow *Browser::createHiddenWindow(bool offTheRecord)
             QObject::connect(mainWindow, &QObject::destroyed, [this, mainWindow]() {
                 m_windows.removeOne(mainWindow);
             });
+            mainWindow->refreshFavoriteIcon(QUrl());
         }
     } catch (const std::exception& e) {
         qDebug() << "Exception lors de la création de BrowserWindow:" << e.what();

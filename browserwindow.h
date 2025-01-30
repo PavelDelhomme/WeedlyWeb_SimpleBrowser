@@ -5,8 +5,9 @@
 #define BROWSERWINDOW_H
 
 #include <QMainWindow>
-#include <QTime>
 #include <QWebEnginePage>
+#include <QToolBar>
+#include <QProgressBar>
 #include <QMenu>
 #include <QAction>
 #include <QJsonArray>
@@ -18,12 +19,10 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QDialog>
+#include <QLineEdit>
 
-
-QT_BEGIN_NAMESPACE
-class QLineEdit;
-class QProgressBar;
-QT_END_NAMESPACE
+#include "commandwidget.h"
+#include "requestinterceptor.h"
 
 class Browser;
 class TabWidget;
@@ -40,6 +39,7 @@ public:
     TabWidget *tabWidget() const;
     WebView *currentTab() const;
     Browser *browser() { return m_browser; }
+    void refreshFavoriteIcon(const QUrl &url) { updateFavoriteIcon(url); }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -60,6 +60,8 @@ private slots:
     void saveFavoritesFromTree(QTreeWidget *tree);
     void updateFavoriteIcon(const QUrl &url);
 
+    void processCommand(const QString &command);
+    void toggleCommandWidget();
 
 private:
     QMenu *createFileMenu(TabWidget *tabWidget);
@@ -68,11 +70,13 @@ private:
     QMenu *createWindowMenu(TabWidget *tabWidget);
     QMenu *createHelpMenu();
     QToolBar *createToolBar();
+    QMenu *createCommandMenu();
 
 private:
     Browser *m_browser;
     QWebEngineProfile *m_profile;
     TabWidget *m_tabWidget;
+    CommandWidget *m_commandWidget;
     QProgressBar *m_progressBar = nullptr;
     QAction *m_historyBackAction = nullptr;
     QAction *m_historyForwardAction = nullptr;
@@ -109,7 +113,23 @@ private:
     void editFavorite(const QString &oldTitle, const QUrl &oldUrl);
     QString saveFavicon(const QByteArray &data, const QUrl &url);
     void updateFaviconForFavorite(const QUrl &url, const QString &faviconPath);
+    void updateFavoriteIcon(const QUrl &url, bool ok = true);
+
     void handleWebViewLoadFinished(bool ok);
+
+    bool isFavorite(const QUrl &url) const;
+
+    void processCVECommand(const QString &command);
+
+    RequestInterceptor *m_requestInterceptor;
+    void showRequestAnalyzer();
+
+    void processRequestCommand(const QString &command);
+    QStringList detectCVEs(const QString &html);
+    void displayCVEResults(const QStringList &cves);
+    void sendGetRequest(const QString &url);
+    void sendPostRequest(const QString &url);
+    void handleNetworkReply(QNetworkReply *reply);
 };
 
 #endif // BROWSERWINDOW_H

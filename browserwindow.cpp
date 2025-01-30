@@ -6,6 +6,7 @@
 #include "downloadmanagerwidget.h"
 #include "tabwidget.h"
 #include "webview.h"
+#include "commandwidget.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QEvent>
@@ -24,6 +25,14 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QComboBox>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QRegularExpression>
+#include <QListWidget>
+#include <QTextEdit>
+#include <QShortcut>
+#include <QTableWidget>
+#include <QHeaderView>
 
 
 using namespace Qt::StringLiterals;
@@ -32,27 +41,29 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     : m_browser(browser)
     , m_profile(profile)
     , m_tabWidget(new TabWidget(profile, this))
+    , m_progressBar(new QProgressBar(this))
+    , m_historyBackAction(nullptr)
+    , m_stopAction(nullptr)
+    , m_reloadAction(nullptr)
+    , m_stopReloadAction(nullptr)
+    , m_urlLineEdit(nullptr)
+    , m_favAction(new QAction(this))
+    , m_settingsMenu(nullptr)
+    , m_settingsAction(nullptr)
     , m_toolbar(createToolBar())
     , m_favoritesBar(new QToolBar(tr("Favoris"), this))  // Initialisation de la barre de favoris
-    , m_progressBar(new QProgressBar(this))  // Initialisation de la barre de progression
+    , m_moreFavoritesAction(nullptr)
+    , m_favoritesMenu(nullptr)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setFocusPolicy(Qt::ClickFocus);
-    //QToolBar *toolbar = createToolBar();
-    //addToolBar(toolbar);
 
 
     if (!forDevTools) {
-        m_progressBar = new QProgressBar(this);
-
-        // QToolBar *toolbar = createToolBar();
-        // addToolBar(toolbar);
         addToolBar(m_toolbar);
 
         // Barre de favoris ajoutée avant les onglets
-        //m_favoritesBar = new QToolBar(tr("Favris"));
         m_favoritesBar->setMovable(false);
-        //addToolBar(m_favoritesBar);
 
         setupFavoritesBar();
         setupFavoritesMenu();
@@ -60,10 +71,10 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
 
         menuBar()->addMenu(createFileMenu(m_tabWidget));
         menuBar()->addMenu(createEditMenu());
-        //menuBar()->addMenu(createViewMenu(toolbar));
         menuBar()->addMenu(createViewMenu(m_toolbar));
         menuBar()->addMenu(createWindowMenu(m_tabWidget));
         menuBar()->addMenu(createHelpMenu());
+        menuBar()->addMenu(createCommandMenu());
     }
 
     QWidget *centralWidget = new QWidget(this);
@@ -73,16 +84,34 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     if (!forDevTools) {
         addToolBarBreak();
 
-        m_progressBar->setMaximumHeight(1);
-        m_progressBar->setTextVisible(false);
-        m_progressBar->setStyleSheet(u"QProgressBar {border: 0px} QProgressBar::chunk {background-color: #da4453}"_s);
+        m_progressBar = new QProgressBar(this);
 
-        layout->addWidget(m_progressBar);
+        if (m_progressBar) {
+            m_progressBar->setMaximumHeight(1);
+            m_progressBar->setTextVisible(false);
+            m_progressBar->setStyleSheet(u"QProgressBar {border: 0px} QProgressBar::chunk {background-color: #da4453}"_s);
+            layout->addWidget(m_progressBar);
+        }
     }
 
     layout->addWidget(m_toolbar);
 
     layout->addWidget(m_favoritesBar);
+
+    m_favAction = new QAction(this);
+    if (m_favAction) {
+        m_favAction->setIcon(QIcon(":/star-regular.png"));
+    } else {
+        qDebug() << "m_favAction is null in BrowserWindow constructor";
+    }
+    if (m_favAction) {
+        m_favAction->setToolTip(tr("Ajouter/Supprimer des favoris"));
+    } else {
+        qDebug() << "m_favAction is null when setting tooltip";
+    }
+
+    connect(m_favAction, &QAction::triggered, this, &BrowserWindow::handleFavActionTriggered);
+
 
     layout->addWidget(m_tabWidget);
     centralWidget->setLayout(layout);
@@ -90,8 +119,22 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
 
     if (m_tabWidget) {
         connect(m_tabWidget, &TabWidget::titleChanged, this, &BrowserWindow::handleWebViewTitleChanged);
+<<<<<<< HEAD
         connect(m_tabWidget, &TabWidget::urlChanged, this, &BrowserWindow::updateFavoriteIcon);
+=======
+        connect(m_tabWidget, &TabWidget::currentChanged, this, [this](int index) {
+            if (WebView *view = m_tabWidget->currentWebView()) {
+                updateFavoriteIcon(view->url()); // Mise à jour immédiate de l'icône au changement d'onglet
+                connect(view, &WebView::loadFinished, this, [this](bool ok) {
+                    updateFavoriteIcon(currentTab()->url(), ok);
+                });
+            }
+        });
+>>>>>>> 84b941f (Adding command system with key shortcut 'CTRL + ALT left + C')
     }
+    connect(m_tabWidget, &TabWidget::urlChanged, this, [this](const QUrl &url) {
+        updateFavoriteIcon(url);
+    });
 
     if (!forDevTools) {
         if (m_tabWidget) {
@@ -118,6 +161,24 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
             m_urlLineEdit->setFocus(Qt::ShortcutFocusReason);
         });
     }
+
+    // Commandes
+    m_commandWidget = new CommandWidget(this);
+    m_commandWidget->setGeometry(50, 50, 300, 30);
+    m_commandWidget->hide();
+    layout->addWidget(m_commandWidget);
+
+    // Pour ouvrir la commande faire CTRL + ALT + C
+    QShortcut *commandShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C), this);
+    connect(commandShortcut, &QShortcut::activated, this, &BrowserWindow::toggleCommandWidget);
+
+
+    // Request interceptor
+    m_requestInterceptor = new RequestInterceptor(this);
+    profile->setUrlRequestInterceptor(m_requestInterceptor);
+
+    connect(m_commandWidget, &CommandWidget::commandEntered, this, &BrowserWindow::processCommand);
+
 
     handleWebViewTitleChanged(QString());
     m_tabWidget->createTab();
@@ -182,7 +243,6 @@ QMenu *BrowserWindow::createEditMenu()
     QAction *findAction = editMenu->addAction(tr("&Find"));
     findAction->setShortcuts(QKeySequence::Find);
     connect(findAction, &QAction::triggered, this, &BrowserWindow::handleFindActionTriggered);
-
     QAction *findNextAction = editMenu->addAction(tr("Find &Next"));
     findNextAction->setShortcut(QKeySequence::FindNext);
     connect(findNextAction, &QAction::triggered, [this]() {
@@ -326,6 +386,30 @@ QMenu *BrowserWindow::createHelpMenu()
     helpMenu->addAction(tr("About &Qt"), qApp, QApplication::aboutQt);
     return helpMenu;
 }
+
+void BrowserWindow::toggleCommandWidget()
+{
+    if (m_commandWidget->isVisible()) {
+        m_commandWidget->hide();
+        m_commandWidget->clear();
+    } else {
+        m_commandWidget->show();
+        m_commandWidget->setFocus();
+    }
+}
+
+QMenu *BrowserWindow::createCommandMenu()
+{
+    QMenu *commandMenu = new QMenu(tr("&Commandes"));
+    QAction *showCommandBarAction = commandMenu->addAction(tr("Afficher/Masquer la barre de commande"));
+    showCommandBarAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C));
+    showCommandBarAction->setShortcutVisibleInContextMenu(true);
+
+    connect(showCommandBarAction, &QAction::triggered, this, &BrowserWindow::toggleCommandWidget);
+
+    return commandMenu;
+}
+
 
 static bool isBackspace(const QKeySequence &k)
 {
@@ -514,8 +598,9 @@ TabWidget *BrowserWindow::tabWidget() const
 
 WebView *BrowserWindow::currentTab() const
 {
-    return m_tabWidget->currentWebView();
+    return m_tabWidget ? m_tabWidget->currentWebView() : nullptr;
 }
+
 
 void BrowserWindow::handleWebViewLoadProgress(int progress)
 {
@@ -651,7 +736,7 @@ void BrowserWindow::loadFavoritesToBar()
         QString faviconPath = obj["favicon"].toString();
 
         QAction *favAction = new QAction(title, this);
-        if (!faviconPath.isEmpty()) {
+        if (!faviconPath.isEmpty() && QFile::exists(faviconPath)) {
             favAction->setIcon(QIcon(faviconPath));
         }
         connect(favAction, &QAction::triggered, this, [this, url]() {
@@ -830,7 +915,29 @@ void BrowserWindow::handleFavActionTriggered()
                 m_favAction->setIcon(QIcon(":/star-solid.png"));
             }
         }
+        updateFavoriteIcon(currentUrl);
+        loadFavoritesToBar();
     }
+    // if (webView) {
+    //     QUrl currentUrl = webView->url();
+    //     QString currentTitle = webView->title();
+
+    //     bool favoriteExists = isFavorite(currentUrl);
+
+    //     if (favoriteExists) {
+    //         deleteFavorite(currentUrl);
+    //         updateFavoriteIcon();
+    //         QMessageBox::information(this, tr("Favoris"), tr("Favori supprimé"));
+    //     } else {
+    //         bool ok;
+    //         QString name = QInputDialog::getText(this, tr("Ajouter aux favoris"), tr("Nom du favori:"), QLineEdit::Normal, currentTitle, &ok);
+    //         if (ok && !name.isEmpty()) {
+    //             addFavorite(name, currentUrl.toString());
+    //             updateFavoriteIcon();
+    //             QMessageBox::information(this, tr("Favoris"), tr("Ajouté aux favoris :\n%1").arg(name));
+    //         }
+    //     }
+    // }
 }
 
 
@@ -911,6 +1018,7 @@ void BrowserWindow::handleWebViewLoadFinished(bool ok)
         WebView *view = qobject_cast<WebView*>(sender());
         if (view) {
             QUrl url = view->url();
+            updateFavoriteIcon(url);
             QString faviconUrl = url.scheme() + "://" + url.host() + "/favicon.ico";
 
             // Télécharger la favicon
@@ -1009,13 +1117,8 @@ void BrowserWindow::showFavoritesManager()
         QString url = QInputDialog::getText(nullptr, tr("Ajouter un favori"), tr("URL :"));
 
         if (!title.isEmpty() && !url.isEmpty()) {
-            QTreeWidgetItem *item = new QTreeWidgetItem(treeWidget);
-            item->setText(0, title);
-            item->setText(1, url);
-
-            // Sauvegarder dans le fichier JSON
-            saveFavoritesFromTree(treeWidget);
-            loadFavoritesToBar();
+            addFavorite(title, url); // Utilisation de addFavorite pour ajouter
+            loadFavoritesToBar(); // Rechargement de la barre de favoris
         }
     });
 
@@ -1029,11 +1132,7 @@ void BrowserWindow::showFavoritesManager()
             QString newUrl = QInputDialog::getText(nullptr, tr("Modifier le favori"), tr("URL :"), QLineEdit::Normal, url);
 
             if (!newTitle.isEmpty() && !newUrl.isEmpty()) {
-                currentItem->setText(0, newTitle);
-                currentItem->setText(1, newUrl);
-
-                // Sauvegarder dans le fichier JSON
-                saveFavoritesFromTree(treeWidget);
+                updateFavorite(QUrl(url), newTitle, QUrl(newUrl), currentItem->text(2)); // Utilisation de updateFavorite
                 loadFavoritesToBar();
             }
         }
@@ -1042,10 +1141,8 @@ void BrowserWindow::showFavoritesManager()
     connect(deleteButton, &QPushButton::clicked, [this, treeWidget]() {
         auto currentItem = treeWidget->currentItem();
         if (currentItem) {
-            delete currentItem;
-
-            // Sauvegarder dans le fichier JSON
-            saveFavoritesFromTree(treeWidget);
+            deleteFavorite(QUrl(currentItem->text(1))); // Passage de l'URL pour supprimer
+            delete currentItem; // Supprimer l'élément de l'arbre
             loadFavoritesToBar();
         }
     });
@@ -1080,4 +1177,201 @@ void BrowserWindow::updateFavoriteIcon(const QUrl &url)
 {
     bool isFav = isFavorite(url);
     m_favAction->setIcon(QIcon(isFav ? ":/star-solid.png" : ":/star-regular.png"));
+
+bool BrowserWindow::isFavorite(const QUrl &url) const
+{
+    qDebug() << "Vérification si l'URL est un favori:" << url.toString();
+    QFile file("favorites.json");
+    if (file.open(QIODevice::ReadOnly)) {
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        QJsonArray favoritesArray = doc.array();
+        file.close();
+
+        qDebug() << "Nombre de favoris trouvés:" << favoritesArray.size();
+
+        for (const QJsonValue &value : favoritesArray) {
+            if (value.toObject()["url"].toString() == url.toString()) {
+                qDebug() << "Favori trouvé pour l'URL:" << url.toString();
+                return true;
+            }
+        }
+    } else {
+        qWarning() << "Impossible d'ouvrir le fichier favorites.json";
+    }
+    qDebug() << "URL non trouvée dans les favoris";
+    return false;
+}
+
+
+void BrowserWindow::updateFavoriteIcon(const QUrl &url, bool ok)
+{
+    qDebug() << "Vérification de l'URL pour les favoris:" << url.toString() << "Chargement réussi:" << ok;
+
+    if (!m_favAction) {
+        qWarning() << "m_favAction non initialisé !";
+        return;
+    }
+
+    WebView *webView = currentTab();
+    if (!webView) {
+        m_favAction->setIcon(QIcon(":/star-regular.png"));
+        return;
+    }
+
+    QUrl currentUrl = url.isEmpty() ? webView->url() : url;
+    bool isFav = isFavorite(currentUrl);
+
+    // Mettre a jour l'icône et le tooltip
+    m_favAction->setIcon(QIcon(isFav ? ":/star-solid.png" : ":/star-regular.png"));
+    m_favAction->setToolTip(isFav ? tr("Supprimer des favoris") : tr("Ajouter aux favoris"));
+
+    if (!ok) {
+        // Gérer le cas où le chargement à échoué
+        qDebug() << "Le chargement de la page à échoué";
+    }
+}
+
+
+
+void BrowserWindow::processCommand(const QString &command)
+{
+    if (command.startsWith("/cvec")) {
+        processCVECommand(command);
+    } else if (command.startsWith("/request")) {
+        processRequestCommand(command);
+    } else if (command.startsWith("/analyze")) {
+        showRequestAnalyzer();
+    } else {
+        // Gérer les commandes inconnues
+        qDebug() << "Commande inconnue : " << command;
+    }
+}
+
+void BrowserWindow::processCVECommand(const QString &command)
+{
+    if (command == "/cvec detect") {
+        WebView *currentView = currentTab();
+        if (currentView) {
+            currentView->page()->toHtml([this](const QString &result) {
+                QStringList detectedCVEs = detectCVEs(result);
+                displayCVEResults(detectedCVEs);
+            });
+        }
+    }
+}
+
+
+void BrowserWindow::processRequestCommand(const QString &command)
+{
+    QStringList parts = command.split(" ");
+    if (parts.size() >= 2) {
+        QString method = parts[1];
+        QString url = currentTab()->url().toString();
+
+        if (method == "GET") {
+            sendGetRequest(url);
+        } else if (method == "POST") {
+            sendPostRequest(url);
+        } else if (method == "analyze") {
+            showRequestAnalyzer();
+        }
+    }
+}
+
+QStringList BrowserWindow::detectCVEs(const QString &html) {
+    // Implementer la logique de détection des CVE
+    // Exemple simplifié
+    QStringList cves;
+    QRegularExpression re("CVE-\\d{4}-\\d{4,7}");
+    QRegularExpressionMatchIterator i = re.globalMatch(html);
+    while (i.hasNext()) {
+        QRegularExpressionMatch match = i.next();
+        cves << match.captured(0);
+    }
+    return cves;
+}
+
+void BrowserWindow::displayCVEResults(const QStringList &cves)
+{
+    QDialog *resultDialog = new QDialog(this);
+    resultDialog->setWindowTitle(tr("Résultats de détection CVE"));
+    QVBoxLayout *layout = new QVBoxLayout(resultDialog);
+
+    QListWidget *listWidget = new QListWidget(resultDialog);
+    listWidget->addItems(cves);
+    layout->addWidget(listWidget);
+
+    resultDialog->setLayout(layout);
+    resultDialog->show();
+}
+
+
+void BrowserWindow::sendPostRequest(const QString &url) {
+    // Implementer l'envoi de requête POST
+    // Vous devrez probablement demander les données du corps de la requête à l'utilisateur
+}
+
+
+void BrowserWindow::handleNetworkReply(QNetworkReply *reply)
+{
+    if (reply->error()) {
+        qDebug() << "Erreur : " << reply->errorString();
+        return;
+    }
+
+    QString answer = reply->readAll();
+
+    QDialog *resultDialog = new QDialog(this);
+    resultDialog->setWindowTitle("Résultat de la requête");
+    QVBoxLayout *layout = new QVBoxLayout(resultDialog);
+
+    QTextEdit *textEdit = new QTextEdit(resultDialog);
+    textEdit->setPlainText(answer);
+    layout->addWidget(textEdit);
+
+    resultDialog->setLayout(layout);
+    resultDialog->show();
+
+    reply->deleteLater();
+}
+
+void BrowserWindow::sendGetRequest(const QString &url)
+{
+    QNetworkAccessManager *manager = new QNetworkAccessManager(this);
+    connect(manager, &QNetworkAccessManager::finished, this, &BrowserWindow::handleNetworkReply);
+    manager->get(QNetworkRequest(QUrl(url)));
+}
+
+void BrowserWindow::showRequestAnalyzer()
+{
+    QDialog *analyzerDialog = new QDialog(this);
+    analyzerDialog->setWindowTitle(tr("Analyseur de requêtes"));
+    QVBoxLayout *layout = new QVBoxLayout(analyzerDialog);
+
+    QTableWidget *requestTable = new QTableWidget(analyzerDialog);
+    requestTable->setColumnCount(3);
+    requestTable->setHorizontalHeaderLabels({tr("ID"), tr("URL"), tr("Méthode")});
+    requestTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
+    // Assurez-vous que m_requestInterceptor est correctement initialisé
+    if (m_requestInterceptor) {
+        auto requests = m_requestInterceptor->getInterceptedRequests();
+        requestTable->setRowCount(requests.size());
+
+        int row = 0;
+        for (auto it = requests.begin(); it != requests.end(); ++it, ++row) {
+            requestTable->setItem(row, 0, new QTableWidgetItem(it.key()));
+            requestTable->setItem(row, 1, new QTableWidgetItem(it.value().url().toString()));
+            requestTable->setItem(row, 2, new QTableWidgetItem(it.value().attribute(QNetworkRequest::CustomVerbAttribute).toString()));
+        }
+    }
+
+    layout->addWidget(requestTable);
+
+    QPushButton *closeButton = new QPushButton(tr("Fermer"), analyzerDialog);
+    connect(closeButton, &QPushButton::clicked, analyzerDialog, &QDialog::accept);
+    layout->addWidget(closeButton);
+
+    analyzerDialog->setLayout(layout);
+    analyzerDialog->exec();
 }

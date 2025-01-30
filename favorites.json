@@ -1,0 +1,51 @@
+[
+    {
+        "title": "Duckduckgo",
+        "url": "https://duckduckgo.com/"
+    },
+    {
+        "folder": "",
+        "title": "Qt Version",
+        "url": "https://qt.io"
+    },
+    {
+        "title": "Gmail",
+        "url": "https://mail.google.com/mail/u/0/?hl=fr#inbox"
+    },
+    {
+        "title": "Accueil - Google Drive",
+        "url": "https://drive.google.com/drive/home"
+    },
+    {
+        "title": "Office",
+        "url": "https://www.office.com/?auth=2"
+    },
+    {
+        "title": "Boom",
+        "url": "https://sig.boom.coop/#/"
+    },
+    {
+        "title": "Qt Version",
+        "url": "chrome://qt/"
+    },
+    {
+        "title": "Google",
+        "url": "https://www.google.fr/"
+    },
+    {
+        "title": "Emacs — Wikipédia",
+        "url": "https://fr.wikipedia.org/wiki/Emacs#:~:text=Emacs est une famille d,plus pertinent%2C retirez-le."
+    },
+    {
+        "title": "GNU Emacs - GNU Project",
+        "url": "https://www.gnu.org/software/emacs/"
+    },
+    {
+        "title": "emacs [Wiki ubuntu-fr]",
+        "url": "https://doc.ubuntu-fr.org/emacs"
+    },
+    {
+        "title": "Télécharger Emacs - Bureautique - Les Numériques",
+        "url": "https://www.lesnumeriques.com/telecharger/emacs-24340"
+    }
+]

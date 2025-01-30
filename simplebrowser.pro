@@ -7,11 +7,13 @@ HEADERS += \
     browserwindow.h \
     downloadmanagerwidget.h \
     downloadwidget.h \
+    requestinterceptor.h \
     tabwidget.h \
     webpage.h \
     webpopupwindow.h \
     webview.h \
-    webauthdialog.h
+    webauthdialog.h \
+    commandwidget.h
 
 SOURCES += \
     browser.cpp \
@@ -19,11 +21,13 @@ SOURCES += \
     downloadmanagerwidget.cpp \
     downloadwidget.cpp \
     main.cpp \
+    requestinterceptor.cpp \
     tabwidget.cpp \
     webpage.cpp \
     webpopupwindow.cpp \
     webview.cpp \
-    webauthdialog.cpp
+    webauthdialog.cpp \
+    commandwidget.cpp
 
 win32 {
     CONFIG -= embed_manifest_exe

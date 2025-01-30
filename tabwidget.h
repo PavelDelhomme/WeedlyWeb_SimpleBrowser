@@ -5,11 +5,15 @@
 #define TABWIDGET_H
 
 #include <QTabWidget>
+#include <QUrl>
+#include <QString>
+#include <QIcon>
 #include <QWebEngineFindTextResult>
 #include <QWebEnginePage>
 
+
 QT_BEGIN_NAMESPACE
-class QUrl;
+class QWebEngineProfile;
 QT_END_NAMESPACE
 
 class WebView;
@@ -22,6 +26,8 @@ public:
     explicit TabWidget(QWebEngineProfile *profile, QWidget *parent = nullptr);
 
     WebView *currentWebView() const;
+    void handleWebViewTitleChanged(const QString &title);
+
 
 signals:
     // current tab/page signals

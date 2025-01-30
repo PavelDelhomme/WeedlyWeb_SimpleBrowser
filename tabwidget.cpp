@@ -141,6 +141,7 @@ void TabWidget::setupView(WebView *webView)
         if (currentIndex() == index)
             emit favIconChanged(icon);
     });
+    connect(webView, &WebView::favIconChanged, this, &TabWidget::updateFavicon);
     connect(webView, &WebView::webActionEnabledChanged, [this, webView](QWebEnginePage::WebAction action, bool enabled) {
         if (currentIndex() ==  indexOf(webView))
             emit webActionEnabledChanged(action,enabled);
@@ -291,5 +292,18 @@ void TabWidget::handleWebViewTitleChanged(const QString &title)
         QString shortTitle = title.length() > 30 ? title.left(17) + "..." : title;
         setTabText(index, shortTitle);
         setTabToolTip(index, title);
+    }
+}
+
+
+void TabWidget::updateFavicon(const QIcon &icon)
+{
+    WebView *view = qobject_cast<WebView*>(sender());
+    if (view) {
+        int index = indexOf(view);
+        if (index != -1) {
+            setTabIcon(index, icon);
+            emit favIconChanged(icon); // Pour mettre à jour la barre de favoris
+        }
     }
 }

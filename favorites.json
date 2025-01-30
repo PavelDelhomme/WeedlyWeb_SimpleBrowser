@@ -4,11 +4,6 @@
         "url": "https://duckduckgo.com/"
     },
     {
-        "folder": "",
-        "title": "Qt Version",
-        "url": "https://qt.io"
-    },
-    {
         "title": "Gmail",
         "url": "https://mail.google.com/mail/u/0/?hl=fr#inbox"
     },
@@ -25,10 +20,6 @@
         "url": "https://sig.boom.coop/#/"
     },
     {
-        "title": "Qt Version",
-        "url": "chrome://qt/"
-    },
-    {
         "title": "Google",
         "url": "https://www.google.fr/"
     },
@@ -41,11 +32,12 @@
         "url": "https://www.gnu.org/software/emacs/"
     },
     {
-        "title": "emacs [Wiki ubuntu-fr]",
-        "url": "https://doc.ubuntu-fr.org/emacs"
+        "folder": "",
+        "title": "Télécharger Emacs ",
+        "url": "https://www.lesnumeriques.com/telecharger/emacs-24340"
     },
     {
-        "title": "Télécharger Emacs - Bureautique - Les Numériques",
-        "url": "https://www.lesnumeriques.com/telecharger/emacs-24340"
+        "title": "Qt Version",
+        "url": "chrome://qt/"
     }
 ]

@@ -20,6 +20,7 @@
 #include <QHBoxLayout>
 #include <QDialog>
 #include <QLineEdit>
+#include <QPainter>
 
 #include "commandwidget.h"
 #include "requestinterceptor.h"
@@ -58,7 +59,6 @@ private slots:
     void handleFavActionTriggered();
     void showFavoritesManager();
     void saveFavoritesFromTree(QTreeWidget *tree);
-    void updateFavoriteIcon(const QUrl &url);
 
     void processCommand(const QString &command);
     void toggleCommandWidget();

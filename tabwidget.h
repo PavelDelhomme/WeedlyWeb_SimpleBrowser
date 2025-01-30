@@ -61,6 +61,7 @@ private slots:
     void closeOtherTabs(int index);
     void reloadAllTabs();
     void reloadTab(int index);
+    void updateFavicon(const QIcon &icon);
 
 private:
     WebView *webView(int index) const;

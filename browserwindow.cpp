@@ -33,6 +33,7 @@
 #include <QShortcut>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QPainter>
 
 
 using namespace Qt::StringLiterals;
@@ -119,9 +120,6 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
 
     if (m_tabWidget) {
         connect(m_tabWidget, &TabWidget::titleChanged, this, &BrowserWindow::handleWebViewTitleChanged);
-<<<<<<< HEAD
-        connect(m_tabWidget, &TabWidget::urlChanged, this, &BrowserWindow::updateFavoriteIcon);
-=======
         connect(m_tabWidget, &TabWidget::currentChanged, this, [this](int index) {
             if (WebView *view = m_tabWidget->currentWebView()) {
                 updateFavoriteIcon(view->url()); // Mise à jour immédiate de l'icône au changement d'onglet
@@ -130,10 +128,16 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
                 });
             }
         });
->>>>>>> 84b941f (Adding command system with key shortcut 'CTRL + ALT left + C')
     }
     connect(m_tabWidget, &TabWidget::urlChanged, this, [this](const QUrl &url) {
         updateFavoriteIcon(url);
+    });
+    // connect(m_tabWidget, &TabWidget::favIconChanged, this, &BrowserWindow::updateFavoriteIcon);
+    connect(m_tabWidget, &TabWidget::favIconChanged, this, [this](const QIcon &icon) {
+        WebView *view = currentTab();
+        if (view) {
+            updateFavoriteIcon(view->url());
+        }
     });
 
     if (!forDevTools) {
@@ -738,7 +742,20 @@ void BrowserWindow::loadFavoritesToBar()
         QAction *favAction = new QAction(title, this);
         if (!faviconPath.isEmpty() && QFile::exists(faviconPath)) {
             favAction->setIcon(QIcon(faviconPath));
+        } else {
+            // Utiliser la première lettre du titre comme icône par défaut
+            QPixmap pixmap(16, 16);
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            painter.setPen(Qt::black);
+            painter.setFont(QFont("Arial", 12, QFont::Bold));
+            painter.drawText(pixmap.rect(), Qt::AlignCenter, title.left(1).toUpper());
+            favAction->setIcon(QIcon(pixmap));
         }
+
+        favAction->setText(title); // S'assurrer que le titre est toujours définis
+        //favAction->setToolTip(url.toString()); // Ajouter l'url comme infobulle
+
         connect(favAction, &QAction::triggered, this, [this, url]() {
             openFavorite(url);
         });
@@ -1173,11 +1190,6 @@ void BrowserWindow::saveFavoritesFromTree(QTreeWidget *tree)
 }
 
 
-void BrowserWindow::updateFavoriteIcon(const QUrl &url)
-{
-    bool isFav = isFavorite(url);
-    m_favAction->setIcon(QIcon(isFav ? ":/star-solid.png" : ":/star-regular.png"));
-
 bool BrowserWindow::isFavorite(const QUrl &url) const
 {
     qDebug() << "Vérification si l'URL est un favori:" << url.toString();
@@ -1212,19 +1224,31 @@ void BrowserWindow::updateFavoriteIcon(const QUrl &url, bool ok)
         return;
     }
 
-    WebView *webView = currentTab();
-    if (!webView) {
-        m_favAction->setIcon(QIcon(":/star-regular.png"));
-        return;
-    }
+    //WebView *webView = currentTab();
+    // if (!webView) {
+    //     m_favAction->setIcon(QIcon(":/star-regular.png"));
+    //     return;
+    // }
 
-    QUrl currentUrl = url.isEmpty() ? webView->url() : url;
+    QUrl currentUrl = url;
     bool isFav = isFavorite(currentUrl);
 
     // Mettre a jour l'icône et le tooltip
     m_favAction->setIcon(QIcon(isFav ? ":/star-solid.png" : ":/star-regular.png"));
     m_favAction->setToolTip(isFav ? tr("Supprimer des favoris") : tr("Ajouter aux favoris"));
-
+    WebView *view = currentTab();
+    if (view) {
+        QUrl url = view->url();
+        if (isFavorite(url)) {
+            // Mettre à jour l'icône dans la barre de favoris
+            for (QAction *action : m_favoritesBar->actions()) {
+                if (action->data().toUrl() == url) {
+                    // action->setIcon(icon);
+                    break;
+                }
+            }
+        }
+    }
     if (!ok) {
         // Gérer le cas où le chargement à échoué
         qDebug() << "Le chargement de la page à échoué";

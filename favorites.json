@@ -39,5 +39,9 @@
     {
         "title": "Qt Version",
         "url": "chrome://qt/"
+    },
+    {
+        "title": "Github",
+        "url": "https://github.com/"
     }
 ]

@@ -7,6 +7,7 @@ HEADERS += \
     browserwindow.h \
     downloadmanagerwidget.h \
     downloadwidget.h \
+    favoritesmanager.h \
     requestinterceptor.h \
     tabwidget.h \
     webpage.h \
@@ -20,6 +21,7 @@ SOURCES += \
     browserwindow.cpp \
     downloadmanagerwidget.cpp \
     downloadwidget.cpp \
+    favoritesmanager.cpp \
     main.cpp \
     requestinterceptor.cpp \
     tabwidget.cpp \

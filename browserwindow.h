@@ -29,6 +29,14 @@ class Browser;
 class TabWidget;
 class WebView;
 
+struct FavoriteItem {
+    QString title;
+    QString url;
+    QString iconPath;
+    QList<FavoriteItem*> children;
+    FavoriteItem* parent;
+};
+
 class BrowserWindow : public QMainWindow
 {
     Q_OBJECT
@@ -59,6 +67,8 @@ private slots:
     void handleFavActionTriggered();
     void showFavoritesManager();
     void saveFavoritesFromTree(QTreeWidget *tree);
+    void populateFolderTree(QTreeWidgetItem* parentItem, FavoriteItem* folder);
+
 
     void processCommand(const QString &command);
     void toggleCommandWidget();
@@ -83,20 +93,29 @@ private:
     QAction *m_stopAction = nullptr;
     QAction *m_reloadAction = nullptr;
     QAction *m_stopReloadAction = nullptr;
+    QCompleter *m_urlCompleter;
     QLineEdit *m_urlLineEdit = nullptr;
     QAction *m_favAction = nullptr;
     QString m_lastSearch;
     QMenu *m_settingsMenu = nullptr;
     QAction *m_settingsAction = nullptr;
     QToolBar *m_toolbar = nullptr;
+    //QTreeView *m_favoritesBar = nullptr;
     QToolBar *m_favoritesBar = nullptr;
     QAction *m_moreFavoritesAction = nullptr;
     QMenu *m_favoritesMenu = nullptr;
     QVector<QPair<QString, QString>> m_favorites;
 
-    bool isFavorite(const QUrl &url);
+
+    FavoriteItem* m_favoritesRoot;
+    void loadFavoritesFromJson();
+    void saveFavoritesToJson();
+    void addFavoriteToBar(FavoriteItem* item, QWidget* parent);
+    FavoriteItem* findFavoriteByUrl(const QUrl& url, FavoriteItem* root=nullptr);
+    FavoriteItem* getSelectedFolder(QTreeWidget* tree);
 
     // Fonctions
+    // // Favorite
     void setupFavoritesBar();
     void setupFavoritesMenu();
     void addCurrentPageToFavorites();
@@ -105,7 +124,7 @@ private:
     void openFavorite(const QUrl &url);
     void saveFavorite(const QUrl &url, const QString &title);
     void loadFavorites();
-    void loadFavoritesToBarRecursive(const QJsonArray& array, QWidget* parent);
+    void loadFavoritesToBarRecursive(const QJsonArray& array, QWidget* parent);    
 
     void deleteFavorite(const QUrl &url);
     void updateFavorite(const QUrl &oldUrl, const QString &newTitle, const QUrl &newUrl, const QString &newFolder);
@@ -114,6 +133,10 @@ private:
     QString saveFavicon(const QByteArray &data, const QUrl &url);
     void updateFaviconForFavorite(const QUrl &url, const QString &faviconPath);
     void updateFavoriteIcon(const QUrl &url, bool ok = true);
+
+    void serializeFavoriteTree(FavoriteItem* root, QJsonArray& array);
+
+    void buildFavoriteTree(const QJsonArray& array, FavoriteItem* parent);
 
     void handleWebViewLoadFinished(bool ok);
 
@@ -130,6 +153,10 @@ private:
     void sendGetRequest(const QString &url);
     void sendPostRequest(const QString &url);
     void handleNetworkReply(QNetworkReply *reply);
+
+    void updateUrlCompleter();
+    void updateFaviconInFavoritesBar(const QUrl &url, const QIcon &icon);
+    void addFavoriteToFolder(const QString &name, const QString &url, FavoriteItem* folder);
 };
 
 #endif // BROWSERWINDOW_H

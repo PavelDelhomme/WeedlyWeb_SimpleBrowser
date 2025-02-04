@@ -8,6 +8,8 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QLabel>
+#include <QDropEvent>
+#include <QMenu>
 
 FavoritesManager::FavoritesManager(QWidget *parent)
     : QDialog(parent)
@@ -16,8 +18,16 @@ FavoritesManager::FavoritesManager(QWidget *parent)
     resize(400, 300);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
-    m_favoritesTree = new QTreeWidget(this);
-    m_favoritesTree->setHeaderLabels({tr("Nom"), tr("URL"), tr("Tags")});
+    m_favoritesTree = new QTreeView(this);
+    m_favoritesModel = new QStandardItemModel(this);
+    m_favoritesTree->setModel(m_favoritesModel);
+    m_favoritesTree->setDragEnabled(true);
+    m_favoritesTree->setAcceptDrops(true);
+    m_favoritesTree->setDropIndicatorShown(true);
+    m_favoritesTree->setDragDropMode(QAbstractItemView::InternalMove);
+
+    m_favoritesModel->setItemPrototype(new QStandardItem);
+    m_favoritesModel->setHorizontalHeaderLabels({tr("Nom"), tr("URL"), tr("Tags")});
     layout->addWidget(m_favoritesTree);
 
 
@@ -49,57 +59,102 @@ FavoritesManager::FavoritesManager(QWidget *parent)
     connect(deleteButton, &QPushButton::clicked, this, &FavoritesManager::deleteFavorite);
     connect(editButton, &QPushButton::clicked, this, &FavoritesManager::editFavorite);
 
+    connect(m_favoritesTree, &QTreeView::customContextMenuRequested, this, &FavoritesManager::showContextMenu);
+    m_favoritesTree->setContextMenuPolicy(Qt::CustomContextMenu);
+
     loadFavorites();
 }
 
 void FavoritesManager::loadFavorites()
 {
+    m_favoritesModel->clear();
+    createDefaultFolder();
+
     QFile file("favorites.json");
     if (file.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
         QJsonArray favoritesArray = doc.array();
-        loadFavoritesRecursive(favoritesArray, nullptr);
+        loadFavoritesRecursive(favoritesArray, m_favoritesModel->item(0));
         file.close();
     }
 }
 
 
+void FavoritesManager::dropEvent(QDropEvent *event)
+{
+    QModelIndex dropIndex = m_favoritesTree->indexAt(event->position().toPoint());
+    QStandardItem* dropItem = m_favoritesModel->itemFromIndex(dropIndex);
+    QList<QStandardItem*> draggedItems;
 
-void FavoritesManager::loadFavoritesRecursive(const QJsonArray& array, QTreeWidgetItem* parent)
+    for (const QModelIndex &index : m_favoritesTree->selectionModel()->selectedIndexes()) {
+        if (index.column() == 0) {
+            draggedItems << m_favoritesModel->itemFromIndex(index)->clone();
+        }
+    }
+
+    for (QStandardItem* item : draggedItems) {
+        if (dropItem && dropItem->data(Qt::UserRole) == "folder") {
+            dropItem->appendRow(item);
+        } else {
+            m_favoritesModel->appendRow(item);
+        }
+    }
+
+    for (const QModelIndex &index : m_favoritesTree->selectionModel()->selectedIndexes()) {
+        if (index.column() == 0) {
+            m_favoritesModel->removeRow(index.row(), index.parent());
+        }
+    }
+    saveFavorites();
+    event->acceptProposedAction();
+}
+
+
+void FavoritesManager::loadFavoritesRecursive(const QJsonArray& array, QStandardItem* parent)
 {
     for (const QJsonValue &value : array) {
         QJsonObject obj = value.toObject();
-        QTreeWidgetItem* item = addTreeItem(parent, obj["name"].toString(), obj["url"].toString(), obj["tags"].toString());
+        QList<QStandardItem*> items;
+        items << new QStandardItem(obj["name"].toString());
+        items << new QStandardItem(obj["url"].toString());
+        items << new QStandardItem(obj["tags"].toString());
+        parent->appendRow(items);
 
         if (obj.contains("children")) {
-            loadFavoritesRecursive(obj["children"].toArray(), item);
+            loadFavoritesRecursive(obj["children"].toArray(), items[0]);
         }
     }
-}
-
-QTreeWidgetItem* FavoritesManager::addTreeItem(QTreeWidgetItem* parent, const QString& name, const QString& url, const QString& tags)
-{
-    QTreeWidgetItem* item = new QTreeWidgetItem(parent ? parent : m_favoritesTree->invisibleRootItem());
-    item->setText(0, name);
-    item->setText(1, url);
-    item->setText(2, tags);
-    return item;
 }
 
 void FavoritesManager::addFolder()
 {
     QString folderName = QInputDialog::getText(this, tr("Nouveau dossier"), tr("Nom du dossier:"));
     if (!folderName.isEmpty()) {
-        addTreeItem(m_favoritesTree->currentItem(), folderName);
+        QStandardItem *folder = new QStandardItem(folderName);
+        folder->setData("folder", Qt::UserRole);
+        QModelIndex index = m_favoritesTree->currentIndex();
+        if (index.isValid()) {
+            m_favoritesModel->itemFromIndex(index)->appendRow(folder);
+        } else {
+            m_favoritesModel->appendRow(folder);
+        }
         saveFavorites();
     }
 }
 
-
 void FavoritesManager::addFavorite()
 {
     if (!m_nameEdit->text().isEmpty() && !m_urlEdit->text().isEmpty()) {
-        addTreeItem(m_favoritesTree->currentItem(), m_nameEdit->text(), m_urlEdit->text(), m_tagsEdit->text());
+        QList<QStandardItem*> items;
+        items << new QStandardItem(m_nameEdit->text());
+        items << new QStandardItem(m_urlEdit->text());
+        items << new QStandardItem(m_tagsEdit->text());
+        QModelIndex index = m_favoritesTree->currentIndex();
+        if (index.isValid()) {
+            m_favoritesModel->itemFromIndex(index)->appendRow(items);
+        } else {
+            m_favoritesModel->appendRow(items);
+        }
         saveFavorites();
         m_nameEdit->clear();
         m_urlEdit->clear();
@@ -109,28 +164,27 @@ void FavoritesManager::addFavorite()
 
 void FavoritesManager::deleteFavorite()
 {
-    QTreeWidgetItem* currentItem = m_favoritesTree->currentItem();
-    if (currentItem) {
-        delete currentItem;
+    QModelIndex index = m_favoritesTree->currentIndex();
+    if (index.isValid()) {
+        m_favoritesModel->removeRow(index.row(), index.parent());
         saveFavorites();
     }
 }
 
 void FavoritesManager::editFavorite()
 {
-    QTreeWidgetItem* currentItem = m_favoritesTree->currentItem();
-    if (currentItem) {
-        currentItem->setText(0, m_nameEdit->text());
-        currentItem->setText(1, m_urlEdit->text());
-        currentItem->setText(2, m_tagsEdit->text());
+    QModelIndex index = m_favoritesTree->currentIndex();
+    if (index.isValid()) {
+        m_favoritesModel->setData(index, m_nameEdit->text());
+        m_favoritesModel->setData(index.sibling(index.row(), 1), m_urlEdit->text());
+        m_favoritesModel->setData(index.sibling(index.row(), 2), m_tagsEdit->text());
         saveFavorites();
     }
 }
-
 void FavoritesManager::saveFavorites()
 {
     QJsonArray favoritesArray;
-    saveFavoritesRecursive(m_favoritesTree->invisibleRootItem(), favoritesArray);
+    saveFavoritesRecursive(m_favoritesModel->invisibleRootItem(), favoritesArray);
 
     QFile file("favorites.json");
     if (file.open(QIODevice::WriteOnly)) {
@@ -140,16 +194,16 @@ void FavoritesManager::saveFavorites()
     }
 }
 
-void FavoritesManager::saveFavoritesRecursive(QTreeWidgetItem* item, QJsonArray& array)
+void FavoritesManager::saveFavoritesRecursive(QStandardItem* item, QJsonArray& array)
 {
-    for (int i = 0; i < item->childCount(); ++i) {
-        QTreeWidgetItem* child = item->child(i);
+    for (int i = 0; i < item->rowCount(); ++i) {
+        QStandardItem* child = item->child(i);
         QJsonObject obj;
-        obj["name"] = child->text(0);
-        obj["url"] = child->text(1);
-        obj["tags"] = child->text(2);
+        obj["name"] = child->text();
+        obj["url"] = child->parent()->child(i, 1)->text();
+        obj["tags"] = child->parent()->child(i, 2)->text();
 
-        if (child->childCount() > 0) {
+        if (child->hasChildren()) {
             QJsonArray childArray;
             saveFavoritesRecursive(child, childArray);
             obj["children"] = childArray;
@@ -158,3 +212,29 @@ void FavoritesManager::saveFavoritesRecursive(QTreeWidgetItem* item, QJsonArray&
         array.append(obj);
     }
 }
+
+
+void FavoritesManager::createDefaultFolder()
+{
+    QStandardItem* defaultFolder = new QStandardItem(tr("Favoris"));
+    defaultFolder->setData("folder", Qt::UserRole);
+    m_favoritesModel->appendRow(defaultFolder);
+}
+
+
+void FavoritesManager::showContextMenu(const QPoint &pos)
+{
+    QModelIndex index = m_favoritesTree->indexAt(pos);
+    QMenu contextMenu(this);
+
+    QAction *addFolderAction = contextMenu.addAction(tr("Ajouter un dossier"));
+    QAction *addFavoriteAction = contextMenu.addAction(tr("Ajouter un favori"));
+    QAction *deleteAction = contextMenu.addAction(tr("Supprimer"));
+
+    connect(addFolderAction, &QAction::triggered, this, &FavoritesManager::addFolder);
+    connect(addFavoriteAction, &QAction::triggered, this, &FavoritesManager::addFavorite);
+    connect(deleteAction, &QAction::triggered, this, &FavoritesManager::deleteFavorite);
+
+    contextMenu.exec(m_favoritesTree->viewport()->mapToGlobal(pos));
+}
+

@@ -78,6 +78,8 @@ set(simplebrowser1_resource_files
     "data/3rdparty/view-refresh.png"
     "data/3rdparty/star-regular.png"
     "data/3rdparty/star-solid.png"
+    "data/3rdparty/folder-opened.png"
+    "data/3rdparty/folder-closed.png"
 )
 
 qt_add_resources(simplebrowser "simplebrowser1"

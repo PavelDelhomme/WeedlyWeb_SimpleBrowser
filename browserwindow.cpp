@@ -58,10 +58,13 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     , m_moreFavoritesAction(nullptr)
     , m_favoritesMenu(nullptr)
     , m_urlCompleter(new QCompleter(this))
+    , m_favoritesRoot(new FavoriteItem{"Root", "", "", {}, nullptr}) // Initialisation de m_favoritesRoot
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setFocusPolicy(Qt::ClickFocus);
 
+    // Charger les favoris depuis le fichier JSON
+    loadFavoritesFromJson();
 
     if (!forDevTools) {
         addToolBar(m_toolbar);
@@ -720,9 +723,6 @@ void BrowserWindow::setupFavoritesBar() {
 
     // Ajouter un bouton "Voir plus" pour les favoris excédentaires
     m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
-    // connect(m_moreFavoritesAction, &QAction::triggered, this, [this]() {
-        // QMessageBox::information(this, tr("Favoris"), tr("Afficher la liste complète des favoris."));
-    // });
     connect(m_moreFavoritesAction, &QAction::triggered, this, &BrowserWindow::showFavoritesManager);
 
     m_favoritesBar->addAction(m_moreFavoritesAction);
@@ -730,63 +730,11 @@ void BrowserWindow::setupFavoritesBar() {
 
 void BrowserWindow::loadFavoritesToBar()
 {
-    /*
-    QFile file("favorites.json");
-    if (!file.open(QIODevice::ReadOnly)) {
+    m_favoritesBar->clear();
+    if (!m_favoritesRoot) {
+        qWarning() << "m_favoritesRoot is null in loadFavoritesToBar()";
         return;
     }
-
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    QJsonArray favoritesArray = doc.array();
-    file.close();
-
-    m_favoritesBar->clear();
-
-    for (const QJsonValue &value : favoritesArray) {
-        QJsonObject obj = value.toObject();
-        QString title = obj["title"].toString();
-        QUrl url = QUrl(obj["url"].toString());
-        QString faviconPath = obj["favicon"].toString();
-
-        QAction *favAction = new QAction(title, this);
-        if (!faviconPath.isEmpty() && QFile::exists(faviconPath)) {
-            favAction->setIcon(QIcon(faviconPath));
-        } else {
-            // Utiliser la première lettre du titre comme icône par défaut
-            QPixmap pixmap(16, 16);
-            pixmap.fill(Qt::transparent);
-            QPainter painter(&pixmap);
-            painter.setPen(Qt::black);
-            painter.setFont(QFont("Arial", 12, QFont::Bold));
-            painter.drawText(pixmap.rect(), Qt::AlignCenter, title.left(1).toUpper());
-            favAction->setIcon(QIcon(pixmap));
-        }
-
-        favAction->setText(title); // S'assurrer que le titre est toujours définis
-        //favAction->setToolTip(url.toString()); // Ajouter l'url comme infobulle
-
-        connect(favAction, &QAction::triggered, this, [this, url]() {
-            openFavorite(url);
-        });
-
-        // Créer un menu contextuel pour l'action
-        QMenu *contextMenu = new QMenu(this);
-        QAction *editAction = contextMenu->addAction(tr("Modifier le favori"));
-        QAction *deleteAction = contextMenu->addAction(tr("Supprimer le favori"));
-
-        connect(editAction, &QAction::triggered, this, [this, title, url] (){
-            editFavorite(title, url);
-        });
-        connect(deleteAction, &QAction::triggered, this, [this, url]() {
-            deleteFavorite(url);
-        });
-
-        favAction->setMenu(contextMenu);
-
-        m_favoritesBar->addAction(favAction);
-    }
-    */
-    m_favoritesBar->clear();
     for (auto* item : m_favoritesRoot->children) {
         addFavoriteToBar(item, m_favoritesBar);
     }
@@ -813,7 +761,6 @@ void BrowserWindow::addFavoriteToBar(FavoriteItem* item, QWidget* parent)
         action->setText(item->title);
         action->setToolTip(item->url);
 
-        //if (!item->iconPath.isEmpty() && QFile::exists(item->iconPath)) {
         if (!item->iconPath.isEmpty()) {
             action->setIcon(QIcon(item->iconPath));
         } else {
@@ -821,21 +768,10 @@ void BrowserWindow::addFavoriteToBar(FavoriteItem* item, QWidget* parent)
             QPixmap pix(16, 16);
             pix.fill(Qt::transparent);
             QPainter painter(&pix);
-            //painter.setPen(Qt::black);
-            //painter.setFont(QFont("Arial", 12, QFont::Bold));
-            //painter.drawText(pixmap.rect(), Qt::AlignCenter, item->title.left(1).toUpper());
             painter.drawText(pix.rect(), Qt::AlignCenter, item->title.left(1));
             action->setIcon(QIcon(pix));
         }
 
-        //connect(action, &QAction::triggered, this, [this, item]() {
-        //     openFavorite(QUrl(item->url));
-        // });
-        // if (parent == m_favoritesBar) {
-        //     m_favoritesBar->addAction(action);
-        // } else {
-        //     static_cast<QMenu*>(parent)->addAction(action);
-        // }
         connect(action, &QAction::triggered, this, [this, item]() {
             m_tabWidget->setUrl(QUrl(item->url));
         });
@@ -1004,26 +940,6 @@ void BrowserWindow::handleFavActionTriggered()
         updateFavoriteIcon(currentUrl);
         loadFavoritesToBar();
     }
-    // if (webView) {
-    //     QUrl currentUrl = webView->url();
-    //     QString currentTitle = webView->title();
-
-    //     bool favoriteExists = isFavorite(currentUrl);
-
-    //     if (favoriteExists) {
-    //         deleteFavorite(currentUrl);
-    //         updateFavoriteIcon();
-    //         QMessageBox::information(this, tr("Favoris"), tr("Favori supprimé"));
-    //     } else {
-    //         bool ok;
-    //         QString name = QInputDialog::getText(this, tr("Ajouter aux favoris"), tr("Nom du favori:"), QLineEdit::Normal, currentTitle, &ok);
-    //         if (ok && !name.isEmpty()) {
-    //             addFavorite(name, currentUrl.toString());
-    //             updateFavoriteIcon();
-    //             QMessageBox::information(this, tr("Favoris"), tr("Ajouté aux favoris :\n%1").arg(name));
-    //         }
-    //     }
-    // }
 }
 
 bool BrowserWindow::isFavorite(const QUrl &url) const
@@ -1267,12 +1183,6 @@ void BrowserWindow::updateFavoriteIcon(const QUrl &url, bool ok)
         return;
     }
 
-    //WebView *webView = currentTab();
-    // if (!webView) {
-    //     m_favAction->setIcon(QIcon(":/star-regular.png"));
-    //     return;
-    // }
-
     QUrl currentUrl = url;
     bool isFav = isFavorite(currentUrl);
 
@@ -1420,7 +1330,6 @@ void BrowserWindow::showRequestAnalyzer()
     requestTable->setHorizontalHeaderLabels({tr("ID"), tr("URL"), tr("Méthode")});
     requestTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
-    // Assurez-vous que m_requestInterceptor est correctement initialisé
     if (m_requestInterceptor) {
         auto requests = m_requestInterceptor->getInterceptedRequests();
         requestTable->setRowCount(requests.size());
@@ -1464,11 +1373,26 @@ void BrowserWindow::updateUrlCompleter()
 
 void BrowserWindow::loadFavoritesFromJson()
 {
-    QFile file("favorites.json");
-    if (!file.open(QIODevice::ReadOnly))
+    QString filePath = QDir::currentPath() + "favorites.json";
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Impossible d'ouvrir le fichier favorites.json : " << file.errorString();
         return;
+    }
 
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    QJsonParseError jsonError;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &jsonError);
+    if (jsonError.error != QJsonParseError::NoError) {
+        qWarning() << "Erreur de parsing JSON : " << jsonError.errorString();
+        return;
+    }
+
+    if (!doc.isArray()) {
+        qWarning() << "Le fichier JSON ne contient pas un tableau à la racine";
+        return;
+    }
+
+    m_favoritesRoot = new FavoriteItem{"Root", "", "", {}, nullptr};
     buildFavoriteTree(doc.array(), m_favoritesRoot);
     file.close();
 }
@@ -1476,16 +1400,23 @@ void BrowserWindow::loadFavoritesFromJson()
 void BrowserWindow::buildFavoriteTree(const QJsonArray& array, FavoriteItem* parent)
 {
     for (const QJsonValue& value : array) {
+        if (!value.isObject()) {
+            qWarning() << "Element invalide dans le JSON des favoris";
+            continue;
+        }
+
         QJsonObject obj = value.toObject();
+        bool isFolder = obj["folder"].toBool(false);
+
         FavoriteItem* item = new FavoriteItem{
             obj["title"].toString(),
-            obj["url"].toString(),
+            isFolder ? QString() : obj["url"].toString(),
             obj["iconPath"].toString(),
             {},
             parent
         };
 
-        if (obj.contains("children")) {
+        if (isFolder && obj.contains("children") && obj["children"].isArray()) {
             buildFavoriteTree(obj["children"].toArray(), item);
         }
         parent->children.append(item);

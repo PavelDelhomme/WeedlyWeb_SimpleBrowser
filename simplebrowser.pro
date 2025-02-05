@@ -5,6 +5,7 @@ QT += webenginewidgets
 HEADERS += \
     browser.h \
     browserwindow.h \
+    cveanalyzer.h \
     downloadmanagerwidget.h \
     downloadwidget.h \
     favoritesmanager.h \
@@ -19,6 +20,7 @@ HEADERS += \
 SOURCES += \
     browser.cpp \
     browserwindow.cpp \
+    cveanalyzer.cpp \
     downloadmanagerwidget.cpp \
     downloadwidget.cpp \
     favoritesmanager.cpp \

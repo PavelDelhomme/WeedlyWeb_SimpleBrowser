@@ -191,6 +191,8 @@ void FavoritesManager::saveFavorites()
         QJsonDocument saveDoc(favoritesArray);
         file.write(saveDoc.toJson());
         file.close();
+    } else {
+        qWarning() << "Impossible d'ouvrir le fichier favorites.json pour l'écriture";
     }
 }
 
@@ -199,9 +201,15 @@ void FavoritesManager::saveFavoritesRecursive(QStandardItem* item, QJsonArray& a
     for (int i = 0; i < item->rowCount(); ++i) {
         QStandardItem* child = item->child(i);
         QJsonObject obj;
-        obj["name"] = child->text();
-        obj["url"] = child->parent()->child(i, 1)->text();
-        obj["tags"] = child->parent()->child(i, 2)->text();
+        obj["title"] = child->text();
+
+        bool isFolder = child->data(Qt::UserRole).toString() == "folder";
+        obj["folder"] = isFolder;
+
+        if (!isFolder) {
+            obj["url"] = child->data(Qt::UserRole + 1).toString();
+            obj["favicon"] = child->data(Qt::UserRole + 2).toString();
+        }
 
         if (child->hasChildren()) {
             QJsonArray childArray;

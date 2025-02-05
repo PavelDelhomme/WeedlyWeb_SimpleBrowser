@@ -1,47 +1,24 @@
 [
     {
-        "title": "Duckduckgo",
-        "url": "https://duckduckgo.com/"
+        "title": "Mes favoris",
+        "folder": true,
+        "children": [
+            {
+                "title": "Duckduckgo",
+                "url": "https://duckduckgo.com/",
+                "favicon": ""
+            }
+        ]
     },
     {
-        "title": "Gmail",
-        "url": "https://mail.google.com/mail/u/0/?hl=fr#inbox"
-    },
-    {
-        "title": "Accueil - Google Drive",
-        "url": "https://drive.google.com/drive/home"
-    },
-    {
-        "title": "Office",
-        "url": "https://www.office.com/?auth=2"
-    },
-    {
-        "title": "Boom",
-        "url": "https://sig.boom.coop/#/"
-    },
-    {
-        "title": "Google",
-        "url": "https://www.google.fr/"
-    },
-    {
-        "title": "Emacs — Wikipédia",
-        "url": "https://fr.wikipedia.org/wiki/Emacs#:~:text=Emacs est une famille d,plus pertinent%2C retirez-le."
-    },
-    {
-        "title": "GNU Emacs - GNU Project",
-        "url": "https://www.gnu.org/software/emacs/"
-    },
-    {
-        "folder": "",
-        "title": "Télécharger Emacs ",
-        "url": "https://www.lesnumeriques.com/telecharger/emacs-24340"
-    },
-    {
-        "title": "Qt Version",
-        "url": "chrome://qt/"
-    },
-    {
-        "title": "Github",
-        "url": "https://github.com/"
+        "title": "Autres",
+        "folder": true,
+        "children": [
+            {
+                "title": "Google",
+                "url": "https://google.fr",
+                "favicon": ""
+            }
+        ]
     }
 ]

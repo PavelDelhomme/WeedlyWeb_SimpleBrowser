@@ -29,6 +29,9 @@ bool Database::initDatabase()
                "parent_id INTEGER DEFAULT 0, "
                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
+    QSqlQuery("CREATE INDEX IF NOT EXISTS idx_parent_id ON favorites(parent_id)");
+    QSqlQuery("CREATE INDEX IF NOT EXISTS idx_url ON favorites(url)");
+
     return true;
 }
 
@@ -64,4 +67,32 @@ QVector<QMap<QString, QVariant>> Database::getFavorites()
         }
     }
     return results;
+}
+
+bool Database::updateFavicon(int id, const QString& faviconPath)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE favorites SET icon_path = :path WHERE id = :id");
+    query.bindValue(":path", faviconPath);
+    query.bindValue(":id", id);
+    return query.exec();
+}
+
+
+
+QMap<QString, QVariant> Database::getFavoriteByUrl(const QUrl& url)
+{
+    QSqlQuery query;
+    query.prepare("SELECT id, title, icon_path, parent_id FROM favorites WHERE url = :url");
+    query.bindValue(":url", url.toString());
+    
+    if(query.exec() && query.next()) {
+        return {
+            {"id", query.value(0)},
+            {"title", query.value(1)},
+            {"icon_path", query.value(2)},
+            {"parent_id", query.value(3)}
+        };
+    }
+    return {};
 }

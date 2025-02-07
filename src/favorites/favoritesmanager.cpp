@@ -257,65 +257,20 @@ void FavoritesManager::showContextMenu(const QPoint &pos)
 }
 
 
-
-void FavoritesManager::buildFavoriteTree(const QJsonArray& array, FavoriteItem* parent)
-{
-    // Remplacer par une version SQLite
-    QVector<QMap<QString, QVariant>> favorites = m_database.getFavorites(parent->id);
-    for (const auto &fav : favorites) {
-        FavoriteItem *item = new FavoriteItem(
-            fav["id"].toInt(),
-            fav["title"].toString(),
-            fav["url"].toString(),
-            fav["icon_path"].toString(),
-            {},
-            parent
-        );
-        parent->children.append(item);
-        buildFavoriteTree(QJsonArray(), item); // Appel récursif pour les enfants
-    }
-}
-
-void FavoritesManager::serializeFavoriteTree(FavoriteItem* root, QJsonArray& array)
-{
-    BrowserWindow* browserWindow = qobject_cast<BrowserWindow*>(parent());
-    if (browserWindow) {
-        browserWindow->ensureFavoritesFileExists();
-    }
-    for (FavoriteItem* item : root->children) {
-        QJsonObject obj;
-        obj["title"] = item->title;
-        obj["url"] = item->url;
-        obj["iconPath"] = item->iconPath;
-
-        if (!item->children.isEmpty()) {
-            QJsonArray childArray;
-            serializeFavoriteTree(item, childArray);
-            obj["children"] = childArray;
-        }
-
-        array.append(obj);
-    }
-}
-
 FavoriteItem* FavoritesManager::findFavoriteByUrl(const QUrl& url, FavoriteItem* root)
 {
-    if (!root) {
-        root = m_favoritesRoot;
-    }
-
-    if (root->url == url.toString()) {
-        return root;
-    }
-
-    for (FavoriteItem* child : root->children) {
-        FavoriteItem* found = findFavoriteByUrl(url, child);
-        if (found) {
-            return found;
+    if(!root) root = m_favoritesRoot;
+    
+    std::function<FavoriteItem*(FavoriteItem*)> search;
+    search = [&](FavoriteItem* node) -> FavoriteItem* {
+        if (node->url == url.toString()) return node;
+        for (FavoriteItem* child : node->children) {
+            if (FavoriteItem* found = search(child)) return found;
         }
-    }
+        return nullptr;
+    };
 
-    return nullptr;
+    return search(root);
 }
 
 void FavoritesManager::updateTreeView(FavoriteItem* root)

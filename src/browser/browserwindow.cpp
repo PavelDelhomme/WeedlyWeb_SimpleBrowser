@@ -36,6 +36,9 @@
 #include <QCompleter>
 #include <QFile>
 #include <QStringListModel>
+#include <QDrag>
+#include <QMimeData>
+#include <QFormLayout>
 
 using namespace Qt::StringLiterals;
 
@@ -62,8 +65,11 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     setAttribute(Qt::WA_DeleteOnClose, true);
     setFocusPolicy(Qt::ClickFocus);
 
-    // Charger les favoris depuis le fichier JSON
-    loadFavoritesFromJson();
+    // Initialiser la base de données
+    if (!m_database.initDatabase()) {
+        QMessageBox::critical(this, tr("Erreur"), tr("Impossible d'initialiser la base de données"));
+        return;
+    }
 
     if (!forDevTools) {
         addToolBar(m_toolbar);
@@ -138,7 +144,6 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     connect(m_tabWidget, &TabWidget::urlChanged, this, [this](const QUrl &url) {
         updateFavoriteIcon(url);
     });
-    // connect(m_tabWidget, &TabWidget::favIconChanged, this, &BrowserWindow::updateFavoriteIcon);
     connect(m_tabWidget, &TabWidget::favIconChanged, this, [this](const QIcon &icon) {
         WebView *view = currentTab();
         if (view) {
@@ -718,12 +723,15 @@ void BrowserWindow::loadFavorites()
 
 void BrowserWindow::setupFavoritesBar() {
     m_favoritesBar->clear();
-    m_favoritesBar->setMovable(false);
+    m_favoritesBar->setMovable(true);
     m_favoritesBar->setAcceptDrops(true);
     m_favoritesBar->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_favoritesBar->installEventFilter(this);
 
     connect(m_favoritesBar, &QToolBar::customContextMenuRequested, this, &BrowserWindow::showFavoriteContextMenu);
-    connect(m_favoritesBar, &QToolBar::actionMoved, this, &BrowserWindow::handleFavoriteActionMoved);
+
+    // Gestion du drag-drop manuel
+    m_favoritesBar->setAcceptDrops(true);
 
     // Ajouter un bouton "Voir plus" pour les favoris excédentaires
     m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
@@ -732,24 +740,97 @@ void BrowserWindow::setupFavoritesBar() {
     m_favoritesBar->addAction(m_moreFavoritesAction);
 }
 
-void BrowserWindow::handleFavoriteActionMoved(int from, int to)
-{
-    // Mettre a jour l'ordre des favoris et le déplacmeent dans les dossier etc etc etc quoi
-    // Et sauvegarder les changement
+bool BrowserWindow::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == m_favoritesBar) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            QAction *action = m_favoritesBar->actionAt(mouseEvent->pos());
+            if (action && action != m_moreFavoritesAction) {
+                m_draggedIndex = m_favoritesBar->actions().indexOf(action);
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseMove && m_draggedIndex != -1) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->buttons() & Qt::LeftButton) {
+                // Logique de déplacement visuel ici
+            }
+        }
+        else if (event->type() == QEvent::MouseButtonRelease) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            QAction *targetAction = m_favoritesBar->actionAt(mouseEvent->pos());
+            if (targetAction && m_draggedIndex != -1) {
+                int newIndex = m_favoritesBar->actions().indexOf(targetAction);
+                
+                // Mise à jour de la structure de données
+                if (newIndex != -1 && newIndex != m_draggedIndex) {
+                    m_favoritesRoot->children.move(m_draggedIndex, newIndex);
+                    loadFavoritesToBar();
+                }
+                m_draggedIndex = -1;
+                return true;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
+
+
+
+void BrowserWindow::handleFavoriteDrop(QDropEvent *event) {
+    if (m_draggedIndex == -1) return;
+
+    QPoint pos = event->position().toPoint();
+    int newIndex = m_favoritesBar->actions().indexOf(m_favoritesBar->actionAt(pos));
+
+    if (newIndex != -1 && newIndex != m_draggedIndex) {
+        // Échanger les éléments dans la structure de données
+        m_favoritesRoot->children.swapItemsAt(m_draggedIndex, newIndex);
+        
+        // Mettre à jour l'interface
+        loadFavoritesToBar();
+    }
+    
+    m_draggedIndex = -1;
+}
+
 
 void BrowserWindow::loadFavoritesToBar()
 {
+    QElapsedTimer timer;
+    timer.start();
+
     m_favoritesBar->clear();
-    if (!m_favoritesRoot) {
-        qWarning() << "m_favoritesRoot is null in loadFavoritesToBar()";
-        return;
-    }
-    for (auto* item : m_favoritesRoot->children) {
-        addFavoriteToBar(item, m_favoritesBar);
-    }
+    
+    
+    // Chargement asynchrone
+    QTimer::singleShot(0, [this]() {
+        std::function<void(FavoriteItem*, QMenu*)> addToMenu;
+        addToMenu = [&](FavoriteItem *item, QMenu *parentMenu) {
+            // Implémentation existante modifiée pour utiliser le cache
+        };
+        
+        addToMenu(m_favoritesRoot, nullptr);
+        m_favoritesBar->addAction(m_moreFavoritesAction);
+        
+        qDebug() << "Mise à jour UI en" << timer.elapsed() << "ms";
+    });
 }
 
+
+void BrowserWindow::startDrag()
+{
+    QAction *action = qobject_cast<QAction*>(sender());
+    if (!action) return;
+
+    m_draggedIndex = m_favoritesBar->actions().indexOf(action);
+
+    QDrag *drag = new QDrag(this);
+    QMimeData *mimeData = new QMimeData;
+    mimeData->setText(action->text());
+    drag->setMimeData(mimeData);
+    drag->exec(Qt::MoveAction);
+}
 
 void BrowserWindow::addFavoriteToBar(FavoriteItem* item, QWidget* parent)
 {
@@ -829,51 +910,208 @@ void BrowserWindow::loadFavoritesToBarRecursive(const QJsonArray& array, QWidget
         }
     }
 }
-
-void BrowserWindow::showFavoriteContextMenu(const QPoint &pos, const QString &title, const QUrl &url)
+void BrowserWindow::showFavoriteContextMenu(const QPoint &pos)
 {
-    QMenu contextMenu(this);
-    QAction *editAction = contextMenu.addAction(tr("Modifier le favori"));
-    QAction *deleteAction = contextMenu.addAction(tr("Supprimer le favori"));
+    QAction *clickedAction = m_favoritesBar->actionAt(pos);
+    QUrl currentUrl = currentTab()->url();
+    QString currentTitle = currentTab()->title();
 
-    QAction *selectedAction = contextMenu.exec(m_favoritesBar->mapToGlobal(pos));
-    if (selectedAction == editAction) {
-        editFavorite(title, url);
-    } else if (selectedAction == deleteAction) {
-        deleteFavorite(url);
+    QMenu contextMenu;
+
+    if (clickedAction && clickedAction != m_moreFavoritesAction) {
+        // Mode Édition pour un favori existant
+        QUrl actionUrl = clickedAction->data().toUrl();
+        QString actionTitle = clickedAction->text();
+        
+        QAction *editAction = contextMenu.addAction(tr("✎ Modifier"));
+        QAction *deleteAction = contextMenu.addAction(tr("🗑 Supprimer"));
+        QAction *moveAction = contextMenu.addAction(tr("➔ Déplacer vers..."));
+
+        connect(deleteAction, &QAction::triggered, [this, actionUrl]() {
+            deleteFavorite(actionUrl);
+        });
+
+        connect(editAction, &QAction::triggered, [this, actionUrl]() {
+            FavoriteItem* item = findFavoriteByUrl(actionUrl);
+            if(item) editFavorite(item);
+        });
+
+        connect(moveAction, &QAction::triggered, [this, actionUrl]() {
+            QDialog moveDialog(this);
+            QVBoxLayout layout(&moveDialog);
+            
+            QTreeWidget folderTree;
+            folderTree.setHeaderLabel(tr("Dossiers"));
+            populateFolderTree(&folderTree, m_favoritesRoot);
+            
+            QPushButton newFolderBtn(tr("Nouveau dossier"));
+            connect(&newFolderBtn, &QPushButton::clicked, [&]() {
+                bool ok;
+                QString name = QInputDialog::getText(&moveDialog, tr("Nouveau dossier"), 
+                                                    tr("Nom:"), QLineEdit::Normal, "", &ok);
+                if(ok && !name.isEmpty()) {
+                    FavoriteItem* newFolder = new FavoriteItem{-1, name, "", "", {}, m_favoritesRoot};
+                    m_favoritesRoot->children.append(newFolder);
+                    
+                    // Ajouter au tree widget
+                    QTreeWidgetItem* treeItem = new QTreeWidgetItem({name});
+                    treeItem->setData(0, Qt::UserRole, QVariant::fromValue(newFolder));
+                    folderTree.invisibleRootItem()->addChild(treeItem);
+                }
+            });
+
+            layout.addWidget(&folderTree);
+            layout.addWidget(&newFolderBtn);
+            
+            QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+            layout.addWidget(&buttons);
+            
+            connect(&buttons, &QDialogButtonBox::accepted, &moveDialog, &QDialog::accept);
+            connect(&buttons, &QDialogButtonBox::rejected, &moveDialog, &QDialog::reject);
+
+            if(moveDialog.exec() == QDialog::Accepted) {
+                FavoriteItem* targetFolder = getSelectedFolder(&folderTree);
+                FavoriteItem* item = findFavoriteByUrl(actionUrl);
+                if(item && targetFolder) {
+                    // Retirer de l'ancien parent
+                    if(item->parent) item->parent->children.removeAll(item);
+                    // Ajouter au nouveau parent
+                    item->parent = targetFolder;
+                    targetFolder->children.append(item);
+                    loadFavoritesToBar();
+                }
+            }
+        });
+
+    } else {
+        // Mode Ajout d'un nouveau favori
+        QAction *addAction = contextMenu.addAction(tr("⭐ Ajouter aux favoris"));
+        
+        connect(addAction, &QAction::triggered, [this, currentUrl, currentTitle]() {
+            QDialog dialog(this);
+            dialog.setWindowTitle(tr("Nouveau favori"));
+            QFormLayout form(&dialog);
+            
+            // Widgets de saisie
+            QLineEdit titleEdit(currentTitle);
+            QLineEdit urlEdit(currentUrl.toString());
+            QTreeWidget folderTree;
+            folderTree.setHeaderLabel(tr("Dossiers"));
+            populateFolderTree(&folderTree, m_favoritesRoot);
+            
+            // Bouton nouveau dossier
+            QPushButton newFolderBtn(tr("Nouveau dossier"));
+            connect(&newFolderBtn, &QPushButton::clicked, [&]() {
+                bool ok;
+                QString name = QInputDialog::getText(&dialog, tr("Nouveau dossier"), 
+                                                    tr("Nom:"), QLineEdit::Normal, "", &ok);
+                if(ok && !name.isEmpty()) {
+                    FavoriteItem* newFolder = new FavoriteItem{-1, name, "", "", {}, m_favoritesRoot};
+                    m_favoritesRoot->children.append(newFolder);
+                    
+                    // Mettre à jour l'arborescence
+                    QTreeWidgetItem* treeItem = new QTreeWidgetItem({name});
+                    treeItem->setData(0, Qt::UserRole, QVariant::fromValue(newFolder));
+                    folderTree.invisibleRootItem()->addChild(treeItem);
+                }
+            });
+
+            form.addRow(tr("Titre:"), &titleEdit);
+            form.addRow(tr("URL:"), &urlEdit);
+            form.addRow(tr("Dossier:"), &folderTree);
+            form.addRow(&newFolderBtn);
+            
+            QDialogButtonBox buttons(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+            form.addRow(&buttons);
+
+            connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+            if(dialog.exec() == QDialog::Accepted) {
+                FavoriteItem* selectedFolder = getSelectedFolder(&folderTree);
+                if(selectedFolder) {
+                    addFavoriteToFolder(titleEdit.text(), urlEdit.text(), selectedFolder);
+                }
+            }
+        });
     }
+
+    contextMenu.exec(m_favoritesBar->mapToGlobal(pos));
 }
 
-
-
-void BrowserWindow::editFavorite(const QString &oldTitle, const QUrl &oldUrl)
+void BrowserWindow::editFavorite(FavoriteItem* item)
 {
     QDialog dialog(this);
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    dialog.setWindowTitle(tr("Modifier le favori"));
+    QFormLayout form(&dialog);
 
-    QLineEdit *titleEdit = new QLineEdit(oldTitle, &dialog);
-    QLineEdit *urlEdit = new QLineEdit(oldUrl.toString(), &dialog);
-    QComboBox *folderCombo = new QComboBox(&dialog);
-    // Remplir folderCombo avec les dossiers de favoris existants
+    QLineEdit titleEdit(item->title);
+    QLineEdit urlEdit(item->url);
+    
+    QTreeWidget folderTree;
+    folderTree.setHeaderLabel(tr("Dossiers"));
+    populateFolderTree(&folderTree, m_favoritesRoot);
+    
+    // Sélectionner le dossier actuel
+    QTreeWidgetItem* currentFolderItem = findTreeItem(&folderTree, item->parent);
+    if(currentFolderItem) folderTree.setCurrentItem(currentFolderItem);
 
-    layout->addWidget(new QLabel(tr("Titre:"), &dialog));
-    layout->addWidget(titleEdit);
-    layout->addWidget(new QLabel(tr("URL:"), &dialog));
-    layout->addWidget(urlEdit);
-    layout->addWidget(new QLabel(tr("Dossier:"), &dialog));
-    layout->addWidget(folderCombo);
+    QPushButton newFolderBtn(tr("Nouveau dossier"));
+    connect(&newFolderBtn, &QPushButton::clicked, [&]() {
+        bool ok;
+        QString name = QInputDialog::getText(&dialog, tr("Nouveau dossier"), 
+                                          tr("Nom:"), QLineEdit::Normal, "", &ok);
+        if(ok && !name.isEmpty()) {
+            FavoriteItem* newFolder = new FavoriteItem{-1, name, "", "", {}, m_favoritesRoot};
+            m_favoritesRoot->children.append(newFolder);
+            
+            QTreeWidgetItem* treeItem = new QTreeWidgetItem({name});
+            treeItem->setData(0, Qt::UserRole, QVariant::fromValue(newFolder));
+            folderTree.invisibleRootItem()->addChild(treeItem);
+        }
+    });
 
-    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
-    layout->addWidget(buttonBox);
+    QPushButton deleteBtn(tr("Supprimer"));
+    connect(&deleteBtn, &QPushButton::clicked, [&]() {
+        deleteFavorite(QUrl(item->url));
+        dialog.reject();
+    });
 
-    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form.addRow(tr("Titre:"), &titleEdit);
+    form.addRow(tr("URL:"), &urlEdit);
+    form.addRow(tr("Dossier:"), &folderTree);
+    form.addRow(&newFolderBtn);
+    
+    QDialogButtonBox buttons(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    form.addRow(&buttons);
+    form.addRow(&deleteBtn);
 
-    if (dialog.exec() == QDialog::Accepted) {
-        updateFavorite(oldUrl, titleEdit->text(), QUrl(urlEdit->text()), folderCombo->currentText());
+    if(dialog.exec() == QDialog::Accepted) {
+        item->title = titleEdit.text();
+        item->url = urlEdit.text();
+        
+        // Déplacer dans le nouveau dossier
+        FavoriteItem* targetFolder = getSelectedFolder(&folderTree);
+        if(targetFolder && item->parent != targetFolder) {
+            item->parent->children.removeAll(item);
+            item->parent = targetFolder;
+            targetFolder->children.append(item);
+        }
+        
+        loadFavoritesToBar();
     }
 }
 
+QTreeWidgetItem* BrowserWindow::findTreeItem(QTreeWidget* tree, FavoriteItem* target)
+{
+    QTreeWidgetItemIterator it(tree);
+    while(*it) {
+        if((*it)->data(0, Qt::UserRole).value<FavoriteItem*>() == target)
+            return *it;
+        ++it;
+    }
+    return nullptr;
+}
 
 void BrowserWindow::openFavorite(const QUrl &url)
 {
@@ -914,22 +1152,59 @@ void BrowserWindow::addCurrentPageToFavorites()
     }
 }
 
-void BrowserWindow::addFavorite(const QString &name, const QString &url)
+FavoriteItem* BrowserWindow::getSelectedFolderFromTree(QTreeWidget* tree)
 {
-    // Ajouter le favori à la struture de données
-    m_favorites.append({name, url});
-
-    // Ajouter le favori au menu
-    QAction *favoriteAction = m_favoritesMenu->addAction(name);
-    connect(favoriteAction, &QAction::triggered, this, [this, url]() {
-        m_tabWidget->setUrl(QUrl(url));
-    });
-
-    // Sauvegarder les favoris
-    saveFavorite(QUrl(url), name);
-    // Mise a jour du completer
-    updateUrlCompleter();
+    QTreeWidgetItem* selected = tree->currentItem();
+    return selected ? selected->data(0, Qt::UserRole).value<FavoriteItem*>() : m_favoritesRoot;
 }
+
+
+
+void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent)
+{
+    tree->clear();
+    if (!parent) parent = m_favoritesRoot;
+    
+    std::function<void(QTreeWidgetItem*, FavoriteItem*)> addItems;
+    addItems = [&](QTreeWidgetItem* parentItem, FavoriteItem* favorite) {
+        for (FavoriteItem* child : favorite->children) {
+            QTreeWidgetItem* item = new QTreeWidgetItem({child->title});
+            item->setData(0, Qt::UserRole, QVariant::fromValue(child));
+            if (parentItem) {
+                parentItem->addChild(item);
+            } else {
+                tree->addTopLevelItem(item);
+            }
+            addItems(item, child);
+        }
+    };
+    
+    addItems(nullptr, parent);
+}
+
+
+bool BrowserWindow::addFavorite(const QString &name, const QString &url, int parentId)
+{
+    bool success = m_database.addFavorite(name, url, "", parentId);
+    if (success) {
+        loadFavoritesFromDatabase();
+        loadFavoritesToBar();
+    }
+    return success;
+}
+
+
+bool BrowserWindow::deleteFavorite(int id)
+{
+    bool success = m_database.deleteFavorite(id);
+    if (success) {
+        loadFavoritesFromDatabase();
+        loadFavoritesToBar();
+    }
+    return success;
+}
+
+
 
 void BrowserWindow::handleFavActionTriggered()
 {
@@ -986,57 +1261,9 @@ bool BrowserWindow::isFavorite(const QUrl &url) const
 }
 
 
-void BrowserWindow::deleteFavorite(const QUrl &url)
+bool BrowserWindow::updateFavorite(int id, const QString &newTitle, const QString &newUrl, int parentId)
 {
-    QFile file("src/favorites/favorites.json");
-    if (file.open(QIODevice::ReadOnly)) {
-        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-        QJsonArray favoritesArray = doc.array();
-        file.close();
-
-        for (int i = 0; i < favoritesArray.size(); ++i) {
-            if (favoritesArray[i].toObject()["url"].toString() == url.toString()) {
-                favoritesArray.removeAt(i);
-                break;
-            }
-        }
-
-        if (file.open(QIODevice::WriteOnly)) {
-            QJsonDocument saveDoc(favoritesArray);
-            file.write(saveDoc.toJson());
-            file.close();
-        }
-    }
-    loadFavoritesToBar();
-    updateUrlCompleter();
-}
-
-void BrowserWindow::updateFavorite(const QUrl &oldUrl, const QString &newTitle, const QUrl &newUrl, const QString &newFolder)
-{
-    QFile file("src/favorites/favorites.json");
-    if (file.open(QIODevice::ReadOnly)) {
-        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-        QJsonArray favoritesArray = doc.array();
-        file.close();
-
-        for (int i = 0; i < favoritesArray.size(); ++i) {
-            QJsonObject favorite = favoritesArray[i].toObject();
-            if (favorite["url"].toString() == oldUrl.toString()) {
-                favorite["title"] = newTitle;
-                favorite["url"] = newUrl.toString();
-                favorite["folder"] = newFolder;
-                favoritesArray[i] = favorite;
-                break;
-            }
-        }
-
-        if (file.open(QIODevice::WriteOnly)) {
-            QJsonDocument saveDoc(favoritesArray);
-            file.write(saveDoc.toJson());
-            file.close();
-        }
-    }
-    loadFavoritesToBar();
+    return m_database.updateFavorite(id, newTitle, newUrl, parentId);
 }
 
 
@@ -1068,16 +1295,19 @@ void BrowserWindow::handleWebViewLoadFinished(bool ok)
 }
 
 
+
 QString BrowserWindow::saveFavicon(const QByteArray &data, const QUrl &url)
 {
-    QString fileName = url.host() + ".ico";
-    QString filePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/favicons/" + fileName;
-    QFile file(filePath);
+    QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QDir().mkpath(cachePath);
+    
+    QString fileName = cachePath + "/" + url.host() + ".ico";
+    QFile file(fileName);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(data);
         file.close();
     }
-    return filePath;
+    return fileName;
 }
 
 void BrowserWindow::updateFaviconForFavorite(const QUrl &url, const QString &faviconPath)
@@ -1142,32 +1372,30 @@ void BrowserWindow::showFavoritesManager()
         addFavoriteToFolder(nameEdit->text(), urlEdit->text(), parentFolder);
     }
 }
+
 void BrowserWindow::addFavoriteToFolder(const QString &name, const QString &url, FavoriteItem* folder)
 {
-    FavoriteItem* newFavorite = new FavoriteItem{
-        name,
-        url,
-        "", // iconPath, vous pouvez le laisser vide pour l'instant
-        {},
-        folder
-    };
-
-    folder->children.append(newFavorite);
-
-    // Mettre à jour l'interface utilisateur si nécessaire
-    loadFavoritesToBar();
-
-    // Sauvegarder les favoris
-    saveFavoritesToJson();
+    int newId = m_database.addFavorite(name, url, "", folder ? folder->id : 0);
+    if(newId != -1) {
+        FavoriteItem* newItem = new FavoriteItem(newId, name, url, "", {}, folder);
+        folder->children.append(newItem);
+        loadFavoritesToBar();
+    }
 }
 
 
-void BrowserWindow::populateFolderTree(QTreeWidgetItem* parentItem, FavoriteItem* folder)
+void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent, QTreeWidgetItem* parentItem = nullptr)
 {
-    for (FavoriteItem* item : folder->children) {
-        if (item->url.isEmpty()) { // C'est un dossier
-            QTreeWidgetItem* treeItem = new QTreeWidgetItem(parentItem, {item->title});
-            populateFolderTree(treeItem, item);
+    for (FavoriteItem* item : parent->children) {
+        QTreeWidgetItem* treeItem = new QTreeWidgetItem(parentItem, {item->title});
+        treeItem->setData(0, Qt::UserRole, QVariant::fromValue(item));
+        
+        if (!item->children.isEmpty()) {
+            populateFolderTree(tree, item, treeItem);
+        }
+        
+        if (!parentItem) {
+            tree->addTopLevelItem(treeItem);
         }
     }
 }
@@ -1197,40 +1425,25 @@ void BrowserWindow::updateFavoriteIcon(const QUrl &url, bool ok)
 {
     qDebug() << "Vérification de l'URL pour les favoris:" << url.toString() << "Chargement réussi:" << ok;
 
-    if (!m_favAction) {
-        qWarning() << "m_favAction non initialisé !";
+    WebView *view = currentTab();
+    if (!view || !m_favAction) {
+        qWarning() << "WebView ou m_favAction non initialisé !";
         return;
     }
 
     bool isFav = isFavorite(url);
+    QString iconPath = isFav ? ":/icons/star-filled.png" : ":/icons/star-unfilled.png";
 
-    // Mettre a jour l'icône et le tooltip
-    m_favAction->setIcon(QIcon(isFav ? ":/icons/star-filled.png" : ":/icons/star-unfilled.png"));
-    m_favAction->setToolTip(isFav ? tr("Supprimer des favoris") : tr("Ajouter aux favoris"));
-    
-    if (isFav) {
-        m_favAction->setMenu(createFavoriteContextMenu(url));
+    // Récupérer la favicon
+    QIcon favIcon = view->favIcon();
+    if (!favIcon.isNull() && isFav) {
+        m_favAction->setIcon(favIcon);
     } else {
-        m_favAction->setMenu(nullptr);
+        m_favAction->setIcon(QIcon(iconPath));
     }
 
-    // WebView *view = currentTab();
-    // if (view) {
-    //     QUrl url = view->url();
-    //     if (isFavorite(url)) {
-    //         // Mettre à jour l'icône dans la barre de favoris
-    //         for (QAction *action : m_favoritesBar->actions()) {
-    //             if (action->data().toUrl() == url) {
-    //                 // action->setIcon(icon);
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
-    // if (!ok) {
-    //     // Gérer le cas où le chargement à échoué
-    //     qDebug() << "Le chargement de la page à échoué";
-    // }
+    // Mettre à jour le menu contextuel
+    m_favAction->setMenu(isFav ? createFavoriteContextMenu(url) : nullptr);
 }
 
 QMenu* BrowserWindow::createFavoriteContextMenu(const QUrl &url)
@@ -1240,8 +1453,10 @@ QMenu* BrowserWindow::createFavoriteContextMenu(const QUrl &url)
     QAction* deleteAction = menu->addAction(tr("Supprimer le favori"));
 
     connect(editAction, &QAction::triggered, this, [this, url]() {
-        editFavorite(findFavoriteByUrl(url));
+        if (FavoriteItem* item = findFavoriteByUrl(url))
+            editFavorite(item); // Passez l'objet FavoriteItem directement
     });
+
     connect(deleteAction, &QAction::triggered, this, [this, url]() {
         deleteFavorite(url);
     });
@@ -1410,33 +1625,6 @@ void BrowserWindow::updateUrlCompleter()
     m_urlCompleter->setModel(new QStringListModel(urls, m_urlCompleter));
 }
 
-
-void BrowserWindow::loadFavoritesFromJson()
-{
-    QString filePath = QDir::currentPath() + "/src/favorites/favorites.json";
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "Impossible d'ouvrir le fichier favorites.json : " << file.errorString();
-        return;
-    }
-
-    QJsonParseError jsonError;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &jsonError);
-    if (jsonError.error != QJsonParseError::NoError) {
-        qWarning() << "Erreur de parsing JSON : " << jsonError.errorString();
-        return;
-    }
-
-    if (!doc.isArray()) {
-        qWarning() << "Le fichier JSON ne contient pas un tableau à la racine";
-        return;
-    }
-
-    m_favoritesRoot = new FavoriteItem{"Root", "", "", {}, nullptr};
-    buildFavoriteTree(doc.array(), m_favoritesRoot);
-    file.close();
-}
-
 void BrowserWindow::buildFavoriteTree(const QJsonArray& array, FavoriteItem* parent)
 {
     for (const QJsonValue& value : array) {
@@ -1449,6 +1637,7 @@ void BrowserWindow::buildFavoriteTree(const QJsonArray& array, FavoriteItem* par
         bool isFolder = obj["folder"].toBool(false);
 
         FavoriteItem* item = new FavoriteItem{
+            -1, // ID Temporaire
             obj["title"].toString(),
             isFolder ? QString() : obj["url"].toString(),
             obj["iconPath"].toString(),
@@ -1460,20 +1649,6 @@ void BrowserWindow::buildFavoriteTree(const QJsonArray& array, FavoriteItem* par
             buildFavoriteTree(obj["children"].toArray(), item);
         }
         parent->children.append(item);
-    }
-}
-
-
-void BrowserWindow::saveFavoritesToJson()
-{
-    QJsonArray favoritesArray;
-    serializeFavoriteTree(m_favoritesRoot, favoritesArray);
-
-    QFile file("src/favorites/favorites.json");
-    if (file.open(QIODevice::WriteOnly)) {
-        QJsonDocument saveDoc(favoritesArray);
-        file.write(saveDoc.toJson());
-        file.close();
     }
 }
 
@@ -1541,15 +1716,30 @@ void BrowserWindow::updateFaviconInFavoritesBar(const QUrl &url, const QIcon &ic
 }
 
 
-void BrowserWindow::ensureFavoritesFileExists()
+void BrowserWindow::loadFavoritesFromDatabase()
 {
-    QString filePath = QDir::currentPath() + "/src/favorites/favorites.json";
-    QFile file(filePath);
-    if (!file.exists()) {
-        QDir().mkpath(QFileInfo(filePath).path());
-        if (file.open(QIODevice::WriteOnly)) {
-            file.write("[]");
-            file.close();
+    // Nettoyer l'ancienne structure
+    delete m_favoritesRoot;
+    
+    // Reconstruire depuis la base
+    m_favoritesRoot = new FavoriteItem(-1, "Root", "", "", {}, nullptr);
+    
+    std::function<void(FavoriteItem*, int)> buildTree;
+    buildTree = [&](FavoriteItem *parent, int parentId) {
+        QVector<QMap<QString, QVariant>> children = m_database.getFavorites(parentId);
+        for (const auto &child : children) {
+            FavoriteItem *item = new FavoriteItem(
+                child["id"].toInt(),
+                child["title"].toString(),
+                child["url"].toString(),
+                child["icon_path"].toString(),
+                {},
+                parent
+            );
+            parent->children.append(item);
+            buildTree(item, child["id"].toInt());
         }
-    }
+    };
+    
+    buildTree(m_favoritesRoot, 0);
 }

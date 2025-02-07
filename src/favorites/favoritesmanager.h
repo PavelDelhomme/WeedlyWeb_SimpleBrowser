@@ -16,6 +16,7 @@ class FavoritesManager : public QDialog
 public:
     explicit FavoritesManager(QWidget *parent = nullptr);
     void showContextMenu(const QPoint &pos);
+    void updateTreeView(FavoriteItem* root);
 
 protected:
     void dropEvent(QDropEvent *event) override;
@@ -26,7 +27,6 @@ private slots:
     void deleteFavorite();
     void editFavorite();
     void saveFavorites();
-    void createDefaultFolder();
 
 private:
     QTreeView *m_favoritesTree;
@@ -42,6 +42,9 @@ private:
     void buildFavoriteTree(const QJsonArray& array, FavoriteItem* parent);
     void serializeFavoriteTree(FavoriteItem* root, QJsonArray& array);
     FavoriteItem* findFavoriteByUrl(const QUrl& url, FavoriteItem* root = nullptr);
+
+    void createDefaultFolder();
+    void populateTree(FavoriteItem* node, QStandardItem* parent);
 };
 
 #endif // FAVORITESMANAGER_H

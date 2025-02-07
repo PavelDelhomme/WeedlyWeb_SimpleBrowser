@@ -260,30 +260,28 @@ void FavoritesManager::showContextMenu(const QPoint &pos)
 
 void FavoritesManager::buildFavoriteTree(const QJsonArray& array, FavoriteItem* parent)
 {
-    for (const QJsonValue& value : array) {
-        if (!value.isObject()) {
-            continue;
-        }
-        
-        QJsonObject obj = value.toObject();
-        FavoriteItem* item = new FavoriteItem{
-            obj["title"].toString(),
-            obj["url"].toString(),
-            obj["iconPath"].toString(),
+    // Remplacer par une version SQLite
+    QVector<QMap<QString, QVariant>> favorites = m_database.getFavorites(parent->id);
+    for (const auto &fav : favorites) {
+        FavoriteItem *item = new FavoriteItem(
+            fav["id"].toInt(),
+            fav["title"].toString(),
+            fav["url"].toString(),
+            fav["icon_path"].toString(),
             {},
             parent
-        };
-
-        if (obj.contains("children") && obj["children"].isArray()) {
-            buildFavoriteTree(obj["children"].toArray(), item);
-        }
+        );
         parent->children.append(item);
+        buildFavoriteTree(QJsonArray(), item); // Appel récursif pour les enfants
     }
 }
 
 void FavoritesManager::serializeFavoriteTree(FavoriteItem* root, QJsonArray& array)
 {
-    BrowserWindow::ensureFavoritesFileExists();
+    BrowserWindow* browserWindow = qobject_cast<BrowserWindow*>(parent());
+    if (browserWindow) {
+        browserWindow->ensureFavoritesFileExists();
+    }
     for (FavoriteItem* item : root->children) {
         QJsonObject obj;
         obj["title"] = item->title;
@@ -319,3 +317,12 @@ FavoriteItem* FavoritesManager::findFavoriteByUrl(const QUrl& url, FavoriteItem*
 
     return nullptr;
 }
+
+void FavoritesManager::updateTreeView(FavoriteItem* root)
+{
+    m_favoritesRoot = root;
+    m_favoritesModel->clear();
+    createDefaultFolder();
+    populateTree(root, m_favoritesModel->invisibleRootItem());
+}
+

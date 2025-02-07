@@ -18,21 +18,31 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QPainter>
+#include <QDrag>
+#include <QMimeData>
 
 #include "commandwidget.h"
 #include "requestinterceptor.h"
+#include "database.h"
 
 class Browser;
 class TabWidget;
 class WebView;
 
 struct FavoriteItem {
+    int id; // <-- Ajouter ceci
     QString title;
     QString url;
     QString iconPath;
     QList<FavoriteItem*> children;
     FavoriteItem* parent;
+    
+    // Constructeur
+    FavoriteItem(int id = -1, QString title = "", QString url = "", QString iconPath = "", 
+                 QList<FavoriteItem*> children = {}, FavoriteItem* parent = nullptr)
+        : id(id), title(title), url(url), iconPath(iconPath), children(children), parent(parent) {}
 };
+
 
 class BrowserWindow : public QMainWindow
 {
@@ -55,6 +65,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void handleNewWindowTriggered();
@@ -70,9 +81,9 @@ private slots:
     void handleFavActionTriggered();
     void showFavoritesManager();
     void saveFavoritesFromTree(QTreeWidget *tree);
-    void populateFolderTree(QTreeWidgetItem* parentItem, FavoriteItem* folder);
-
-
+    void populateFolderTree(QTreeWidget* tree, FavoriteItem* parent = nullptr);
+    void handleFavoriteDrop(QDropEvent *event);
+    void startDrag();
     void processCommand(const QString &command);
     void toggleCommandWidget();
 
@@ -107,52 +118,64 @@ private:
     QAction *m_moreFavoritesAction = nullptr;
     QMenu *m_favoritesMenu = nullptr;
     QVector<QPair<QString, QString>> m_favorites;
-
+    Database m_database;
+    int m_draggedIndex = -1; // Ajoutez cette ligne
 
     FavoriteItem* m_favoritesRoot;
-    void loadFavoritesFromJson();
-    void saveFavoritesToJson();
     void addFavoriteToBar(FavoriteItem* item, QWidget* parent);
     FavoriteItem* findFavoriteByUrl(const QUrl& url, FavoriteItem* root=nullptr);
     FavoriteItem* getSelectedFolder(QTreeWidget* tree);
+    FavoriteItem* getSelectedFolderFromTree(QTreeWidget* tree);
+
 
     // Fonctions
     // // Favorite
     void setupFavoritesBar();
     void setupFavoritesMenu();
     void addCurrentPageToFavorites();
-    void addFavorite(const QString &name, const QString &url);
+
+    // Crud
+    bool addFavorite(const QString &name, const QString &url, const QString &iconPath, int parentId = 0);
+    bool deleteFavorite(int id);
+    bool updateFavorite(int id, const QString &newTitle, const QString &newUrl, int parentId);
+
+    void updateFaviconInFavoritesBar(const QUrl &url, const QIcon &icon);
+    void addFavoriteToFolder(const QString &name, const QString &url, FavoriteItem* folder);
+    QMenu* createFavoriteContextMenu(const QUrl &url);
+
+    void loadFavoritesFromDatabase();
     void loadFavoritesToBar();
     void openFavorite(const QUrl &url);
     void saveFavorite(const QUrl &url, const QString &title);
     void loadFavorites();
     void loadFavoritesToBarRecursive(const QJsonArray& array, QWidget* parent);
 
-    void deleteFavorite(const QUrl &url);
-    void updateFavorite(const QUrl &oldUrl, const QString &newTitle, const QUrl &newUrl, const QString &newFolder);
-    void showFavoriteContextMenu(const QPoint &pos, const QString &title, const QUrl &url);
-    void editFavorite(const QString &oldTitle, const QUrl &oldUrl);
+    void showFavoriteContextMenu(const QPoint &pos);
+    void editFavorite(FavoriteItem* item);
     QString saveFavicon(const QByteArray &data, const QUrl &url);
     void updateFaviconForFavorite(const QUrl &url, const QString &faviconPath);
     void updateFavoriteIcon(const QUrl &url, bool ok = true);
+    QTreeWidgetItem* findTreeItem(QTreeWidget* tree, FavoriteItem* target);
 
+    // Others
     void handleWebViewLoadFinished(bool ok);
+    void updateUrlCompleter();
 
+    // Command
     void processCVECommand(const QString &command);
-
-    RequestInterceptor *m_requestInterceptor;
-    void showRequestAnalyzer();
-
     void processRequestCommand(const QString &command);
+
+    // Command - CVEs
     QStringList detectCVEs(const QString &html);
     void displayCVEResults(const QStringList &cves);
+    
+    // Command - Request
+    RequestInterceptor *m_requestInterceptor;
+    void showRequestAnalyzer();
     void sendGetRequest(const QString &url);
     void sendPostRequest(const QString &url);
     void handleNetworkReply(QNetworkReply *reply);
 
-    void updateUrlCompleter();
-    void updateFaviconInFavoritesBar(const QUrl &url, const QIcon &icon);
-    void addFavoriteToFolder(const QString &name, const QString &url, FavoriteItem* folder);
 };
 
 #endif // BROWSERWINDOW_H

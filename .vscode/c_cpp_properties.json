@@ -10,7 +10,8 @@
                 "/usr/include/qt6/QtWidgets",
                 "/usr/include/qt6/QtWebEngineWidgets",
                 "/usr/include/qt6/QtWebEngineCore",
-                "/usr/include/qt6/QtNetwork"
+                "/usr/include/qt6/QtNetwork",
+                "/usr/include/qt6/QtSql"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",

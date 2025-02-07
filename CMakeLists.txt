@@ -4,7 +4,10 @@ project(simplebrowser LANGUAGES CXX)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets WebEngineWidgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets WebEngineWidgets Network Sql)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SQLite3 REQUIRED sqlite3)
+
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -12,6 +15,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/downloads
     ${CMAKE_CURRENT_SOURCE_DIR}/src/favorites
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/database
 )
 
 set(SOURCES
@@ -31,6 +35,7 @@ set(SOURCES
     src/browser/certificateerrordialog.cpp
     src/browser/passworddialog.cpp
     src/browser/webauthdialog.cpp
+    src/database/database.cpp
 )
 
 set(HEADERS
@@ -49,6 +54,7 @@ set(HEADERS
     src/browser/certificateerrordialog.h
     src/browser/passworddialog.h
     src/browser/webauthdialog.h
+    src/database/database.h
 )
 
 qt_add_executable(simplebrowser
@@ -61,7 +67,8 @@ target_link_libraries(simplebrowser PRIVATE
     Qt::Gui
     Qt::WebEngineWidgets
     Qt::Network
-)
+    Qt::Sql
+    )
 
 
 # Resources
@@ -80,6 +87,9 @@ set(RESOURCE_FILES
     resources/data/3rdparty/star-solid.png
     resources/data/3rdparty/folder-opened.png
     resources/data/3rdparty/folder-closed.png
+    resources/icons/star-filled.png
+    resources/icons/star-unfilled.png
+    resources/icons/more.png
 )
 
 qt_add_resources(simplebrowser "resources"

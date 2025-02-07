@@ -38,6 +38,8 @@
 #include <QDrag>
 #include <QMimeData>
 #include <QFormLayout>
+#include <QBuffer>
+#include <QTimer>
 
 using namespace Qt::StringLiterals;
 
@@ -59,7 +61,7 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     , m_moreFavoritesAction(nullptr)
     , m_favoritesMenu(nullptr)
     , m_urlCompleter(new QCompleter(this))
-    , m_favoritesRoot(new FavoriteItem{"Root", "", "", {}, nullptr}) // Initialisation de m_favoritesRoot
+    , m_favoritesRoot(new FavoriteItem(-1, "Root", "", "", {}, nullptr)) // Initialisation de m_favoritesRoot
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setFocusPolicy(Qt::ClickFocus);
@@ -803,7 +805,7 @@ void BrowserWindow::loadFavoritesToBar()
     
     
     // Chargement asynchrone
-    QTimer::singleShot(0, [this]() {
+    QTimer::singleShot(0, [this, timer]() { // Capture timer par valeur
         std::function<void(FavoriteItem*, QMenu*)> addToMenu;
         addToMenu = [&](FavoriteItem *item, QMenu *parentMenu) {
             // Implémentation existante modifiée pour utiliser le cache
@@ -1146,7 +1148,7 @@ void BrowserWindow::addCurrentPageToFavorites()
         bool ok;
         QString name = QInputDialog::getText(this, tr("Ajouter aux favoris"), tr("Nom du favori:"), QLineEdit::Normal, title, &ok);
         if (ok && !name.isEmpty()) {
-            addFavorite(name, url);
+            addFavorite(name, url, "", 0); // Spécifier tous les paramètres
         }
     }
 }
@@ -1159,30 +1161,8 @@ FavoriteItem* BrowserWindow::getSelectedFolderFromTree(QTreeWidget* tree)
 
 
 
-void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent)
-{
-    tree->clear();
-    if (!parent) parent = m_favoritesRoot;
-    
-    std::function<void(QTreeWidgetItem*, FavoriteItem*)> addItems;
-    addItems = [&](QTreeWidgetItem* parentItem, FavoriteItem* favorite) {
-        for (FavoriteItem* child : favorite->children) {
-            QTreeWidgetItem* item = new QTreeWidgetItem({child->title});
-            item->setData(0, Qt::UserRole, QVariant::fromValue(child));
-            if (parentItem) {
-                parentItem->addChild(item);
-            } else {
-                tree->addTopLevelItem(item);
-            }
-            addItems(item, child);
-        }
-    };
-    
-    addItems(nullptr, parent);
-}
 
-
-bool BrowserWindow::addFavorite(const QString &name, const QString &url, int parentId)
+bool BrowserWindow::addFavorite(const QString &name, const QString &url, const QString &iconPath, int parentId)
 {
     bool success = m_database.addFavorite(name, url, "", parentId);
     if (success) {
@@ -1192,15 +1172,13 @@ bool BrowserWindow::addFavorite(const QString &name, const QString &url, int par
     return success;
 }
 
-
-bool BrowserWindow::deleteFavorite(int id)
+bool BrowserWindow::deleteFavorite(const QUrl& url)
 {
-    bool success = m_database.deleteFavorite(id);
-    if (success) {
-        loadFavoritesFromDatabase();
-        loadFavoritesToBar();
+    auto favoriteData = m_database.getFavoriteByUrl(url);
+    if(!favoriteData.isEmpty()) {
+        return m_database.deleteFavorite(favoriteData["id"].toInt());
     }
-    return success;
+    return false;
 }
 
 
@@ -1221,7 +1199,6 @@ void BrowserWindow::handleFavActionTriggered()
                                       tr("Voulez-vous vraiment supprimer ce favori ?"),
                                       QMessageBox::Yes | QMessageBox::No);
         if(ret == QMessageBox::Yes && m_database.deleteFavorite(favoriteData["id"].toInt())) {
-            FavoritesCache::instance().invalidate();
             loadFavoritesFromDatabase();
             m_favAction->setIcon(QIcon(":/star-regular.png"));
         }
@@ -1231,9 +1208,11 @@ void BrowserWindow::handleFavActionTriggered()
                                            tr("Nom du favori:"), QLineEdit::Normal,
                                            title, &ok);
         if(ok && !name.isEmpty()) {
-            QString iconPath = saveFavicon(favicon.pixmap(16,16).toImage(), url);
+            QByteArray iconData;
+            QBuffer buffer(&iconData);
+            favicon.pixmap(16,16).save(&buffer, "PNG");
+            QString iconPath = saveFavicon(iconData, url);
             if(m_database.addFavorite(name, url.toString(), iconPath)) {
-                FavoritesCache::instance().invalidate();
                 loadFavoritesFromDatabase();
                 m_favAction->setIcon(QIcon(":/star-solid.png"));
             }
@@ -1353,10 +1332,11 @@ void BrowserWindow::showFavoritesManager()
     QDialog dialog(this);
     dialog.setWindowTitle(tr("Ajouter aux favoris"));
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QTreeWidget* folderTree = new QTreeWidget(this); // Ajouter cette ligne
 
     QTreeWidget *tree = new QTreeWidget(&dialog);
     tree->setHeaderLabel({tr("Dossiers")});
-    populateFolderTree(tree->invisibleRootItem(), m_favoritesRoot);
+    populateFolderTree(folderTree, m_favoritesRoot);
 
     QLineEdit *nameEdit = new QLineEdit(&dialog);
     QLineEdit *urlEdit = new QLineEdit(currentTab()->url().toString(), &dialog);
@@ -1390,22 +1370,28 @@ void BrowserWindow::addFavoriteToFolder(const QString &name, const QString &url,
     }
 }
 
-
-void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent, QTreeWidgetItem* parentItem = nullptr)
+void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent)
 {
-    for (FavoriteItem* item : parent->children) {
-        QTreeWidgetItem* treeItem = new QTreeWidgetItem(parentItem, {item->title});
-        treeItem->setData(0, Qt::UserRole, QVariant::fromValue(item));
-        
-        if (!item->children.isEmpty()) {
-            populateFolderTree(tree, item, treeItem);
+    tree->clear();
+    if (!parent) parent = m_favoritesRoot;
+    
+    std::function<void(QTreeWidgetItem*, FavoriteItem*)> addItems;
+    addItems = [&](QTreeWidgetItem* parentItem, FavoriteItem* favorite) {
+        for (FavoriteItem* child : favorite->children) {
+            QTreeWidgetItem* item = new QTreeWidgetItem({child->title});
+            item->setData(0, Qt::UserRole, QVariant::fromValue(child));
+            if (parentItem) {
+                parentItem->addChild(item);
+            } else {
+                tree->addTopLevelItem(item);
+            }
+            addItems(item, child);
         }
-        
-        if (!parentItem) {
-            tree->addTopLevelItem(treeItem);
-        }
-    }
+    };
+    
+    addItems(nullptr, parent);
 }
+
 
 void BrowserWindow::saveFavoritesFromTree(QTreeWidget *tree)
 {
@@ -1677,37 +1663,36 @@ void BrowserWindow::updateFaviconInFavoritesBar(const QUrl &url, const QIcon &ic
     }
 }
 
-
-// void BrowserWindow::loadFavoritesFromDatabase()
-// {
-//     // Nettoyer l'ancienne structure
-//     delete m_favoritesRoot;
-    
-//     // Reconstruire depuis la base
-//     m_favoritesRoot = new FavoriteItem(-1, "Root", "", "", {}, nullptr);
-    
-//     std::function<void(FavoriteItem*, int)> buildTree;
-//     buildTree = [&](FavoriteItem *parent, int parentId) {
-//         QVector<QMap<QString, QVariant>> children = m_database.getFavorites(parentId);
-//         for (const auto &child : children) {
-//             FavoriteItem *item = new FavoriteItem(
-//                 child["id"].toInt(),
-//                 child["title"].toString(),
-//                 child["url"].toString(),
-//                 child["icon_path"].toString(),
-//                 {},
-//                 parent
-//             );
-//             parent->children.append(item);
-//             buildTree(item, child["id"].toInt());
-//         }
-//     };
-    
-//     buildTree(m_favoritesRoot, 0);
-// }
-
 void BrowserWindow::loadFavoritesFromDatabase()
 {
-    m_favoritesRoot = FavoritesCache::instance().getRoot(m_database);
+    delete m_favoritesRoot;
+    m_favoritesRoot = new FavoriteItem(-1, "Root", "", "", {}, nullptr);
+    
+    QVector<QMap<QString, QVariant>> favorites = m_database.getFavorites(0);
+    QHash<int, FavoriteItem*> items;
+
+    // Création des items
+    for (const auto &fav : favorites) {
+        items[fav["id"].toInt()] = new FavoriteItem(
+            fav["id"].toInt(),
+            fav["title"].toString(),
+            fav["url"].toString(),
+            fav["icon_path"].toString(),
+            {},
+            nullptr
+        );
+    }
+
+    // Construction hiérarchique
+    for (const auto &fav : favorites) {
+        int parentId = fav["parent_id"].toInt();
+        if (parentId > 0 && items.contains(parentId)) {
+            items[parentId]->children.append(items[fav["id"].toInt()]);
+            items[fav["id"].toInt()]->parent = items[parentId];
+        } else {
+            m_favoritesRoot->children.append(items[fav["id"].toInt()]);
+        }
+    }
+    
     loadFavoritesToBar(); // Rafraîchir l'UI
 }

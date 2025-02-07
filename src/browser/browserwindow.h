@@ -81,7 +81,7 @@ private slots:
     void handleFavActionTriggered();
     void showFavoritesManager();
     void saveFavoritesFromTree(QTreeWidget *tree);
-    void populateFolderTree(QTreeWidget* tree, FavoriteItem* parent = nullptr);
+    void populateFolderTree(QTreeWidget* tree, FavoriteItem* parent);
     void handleFavoriteDrop(QDropEvent *event);
     void startDrag();
     void processCommand(const QString &command);
@@ -135,8 +135,8 @@ private:
     void addCurrentPageToFavorites();
 
     // Crud
-    bool addFavorite(const QString &name, const QString &url, const QString &iconPath, int parentId = 0);
-    bool deleteFavorite(int id);
+    bool addFavorite(const QString &name, const QString &url, const QString &iconPath = "", int parentId = 0);
+    bool deleteFavorite(const QUrl& url);
     bool updateFavorite(int id, const QString &newTitle, const QString &newUrl, int parentId);
 
     void updateFaviconInFavoritesBar(const QUrl &url, const QIcon &icon);

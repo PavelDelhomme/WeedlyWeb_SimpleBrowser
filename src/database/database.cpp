@@ -49,11 +49,25 @@ bool Database::addFavorite(const QString &title, const QString &url, const QStri
 }
 
 
+bool Database::deleteFavorite(int id)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM favorites WHERE id = :id");
+    query.bindValue(":id", id);
+    return query.exec();
+}
 
-QVector<QMap<QString, QVariant>> Database::getFavorites()
+QVector<QMap<QString, QVariant>> Database::getFavorites(int parentId = 0)
 {
     QVector<QMap<QString, QVariant>> results;
-    QSqlQuery query("SELECT id, title, url, icon_path, parent_id FROM favorites");
+    QSqlQuery query;
+    
+    if(parentId == 0) {
+        query.prepare("SELECT id, title, url, icon_path, parent_id FROM favorites");
+    } else {
+        query.prepare("SELECT id, title, url, icon_path, parent_id FROM favorites WHERE parent_id = :parent_id");
+        query.bindValue(":parent_id", parentId);
+    }
     
     if(query.exec()) {
         while(query.next()) {

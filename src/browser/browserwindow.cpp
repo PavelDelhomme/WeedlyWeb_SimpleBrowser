@@ -205,7 +205,11 @@ BrowserWindow::BrowserWindow(Browser *browser, QWebEngineProfile *profile, bool 
     //connect(commandShortcut, &QShortcut::activated, this, &BrowserWindow::showCommandPalette);
     QShortcut *commandShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Slash), this);
     connect(commandShortcut, &QShortcut::activated, this, &BrowserWindow::toggleCommandWidget);
-   
+
+    // Duplication de tab
+    QShortcut *duplicateTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), this);
+    connect(duplicateTabShortcut, &QShortcut::activated, this, &BrowserWindow::duplicateCurrentTab);
+
     m_urlCompleter = new QCompleter(this);
     m_urlCompleter->setFilterMode(Qt::MatchContains);
     m_urlCompleter->setCaseSensitivity(Qt::CaseInsensitive);
@@ -1718,4 +1722,14 @@ FavoriteItem* BrowserWindow::findFavoriteByUrl(const QUrl& url, FavoriteItem* ro
     }
     
     return nullptr;
+}
+
+void BrowserWindow::duplicateCurrentTab()
+{
+    WebView *currentView = currentTab();
+    if (currentView) {
+        WebView *newView = m_tabWidget->createTab();
+        newView->setUrl(currentView->url());
+        m_tabWidget->setCurrentWidget(newView);
+    }
 }

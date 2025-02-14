@@ -75,6 +75,7 @@ private slots:
     void startDrag();
     void toggleCommandWidget();
     void onCommandPaletteCommandSelected(const QString &command);
+    void duplicateCurrentTab();
 
 private:
     QMenu *createFileMenu(TabWidget *tabWidget);

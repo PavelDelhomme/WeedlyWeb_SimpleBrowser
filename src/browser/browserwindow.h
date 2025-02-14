@@ -69,6 +69,7 @@ private slots:
     void handleFindTextFinished(const QWebEngineFindTextResult &result);
     void handleFavActionTriggered();
     void showFavoritesManager();
+    
     void saveFavoritesFromTree(QTreeWidget *tree);
     void populateFolderTree(QTreeWidget* tree, FavoriteItem* parent);
     void handleFavoriteDrop(QDropEvent *event);

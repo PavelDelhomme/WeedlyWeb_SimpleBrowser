@@ -753,11 +753,12 @@ void BrowserWindow::setupFavoritesBar() {
     // Gestion du drag-drop manuel
     m_favoritesBar->setAcceptDrops(true);
 
-    // Ajouter un bouton "Voir plus" pour les favoris excédentaires
-    m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
-    connect(m_moreFavoritesAction, &QAction::triggered, this, &BrowserWindow::showFavoritesManager);
-
-    m_favoritesBar->addAction(m_moreFavoritesAction);
+     // Ajouter le bouton "Voir plus" seulement s'il y a des favoris
+     if (!m_favoritesRoot->children.isEmpty()) {
+        m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
+        connect(m_moreFavoritesAction, &QAction::triggered, this, &BrowserWindow::showFavoritesManager);
+        m_favoritesBar->addAction(m_moreFavoritesAction);
+    }
 }
 
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event) {
@@ -814,98 +815,49 @@ void BrowserWindow::handleFavoriteDrop(QDropEvent *event) {
     m_draggedIndex = -1;
 }
 
-
 void BrowserWindow::loadFavoritesToBar() {
-    QElapsedTimer timer;
-    timer.start();
-
     m_favoritesBar->clear();
-    // Ajouter un bouton "Voir plus" pour les favoris excédentaires
-    m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
-    m_favoritesBar->addAction(m_moreFavoritesAction);
-    connect(m_moreFavoritesAction, &QAction::triggered, this, &BrowserWindow::showFavoritesManager);
 
-    // Chargement asynchrone
-    QTimer::singleShot(0, [this, timer, actions = QList<QAction*>()]() mutable {
-        // Capture timer par valeur et actions par copie mutable
-        std::function<void(FavoriteItem*, QToolBar*)> addFavoritesToToolbar;
-        addFavoritesToToolbar = [&](FavoriteItem *item, QToolBar *toolBar) {
-            if (item && !item->children.isEmpty()) {
-                for (FavoriteItem* child : item->children) {
-                    if (child->url.isEmpty()) {
-                        // Gestion des dossiers
-                        QMenu* folderMenu = new QMenu(child->title, toolBar);
-                        folderMenu->setIcon(QIcon(":/3rdparty/folder-closed.png"));
-
-                        // Ajouter les actions au menu du dossier
-                        for (FavoriteItem* subChild : child->children) {
-                            QAction* subAction = new QAction(subChild->title, folderMenu);
-                            subAction->setToolTip(subChild->url);
-
-                            QPixmap pix(16, 16);
-                            pix.fill(Qt::transparent);
-                            QPainter painter(&pix);
-                            painter.setPen(Qt::black);
-                            painter.setFont(QFont("Arial", 10, QFont::Bold));
-                            painter.drawText(pix.rect(), Qt::AlignCenter, subChild->title.left(1).toUpper());
-                            subAction->setIcon(QIcon(pix));
-                            
-                            subAction->setData(QUrl(subChild->url));
-                            folderMenu->addAction(subAction);
-                            QObject::connect(subAction, &QAction::triggered, this, [this, subChild]() {
-                                m_tabWidget->setUrl(QUrl(subChild->url));
-                            });
-                            actions.append(subAction);
-                        }
-
-                        // Ajouter une action si le dossier est vide
-                        if (folderMenu->actions().isEmpty()) {
-                            QAction* emptyAction = new QAction(tr("Dossier vide"), folderMenu);
-                            emptyAction->setEnabled(false);
-                            folderMenu->addAction(emptyAction);
-                            actions.append(emptyAction);
-                        }
-
-                        QAction* menuAction = toolBar->addWidget(folderMenu);
-                        connect(menuAction, &QAction::triggered, this, [this]() {
-                            // Implémentation de l'action du dossier
-                        });
-                    } else {
-                        // C'est un favori
-                        QAction* action = new QAction(item->title, toolBar);
-                        if (!item->iconPath.isEmpty()) {
-                            action->setIcon(QIcon(item->iconPath));
-                        } else {
-                            QPixmap pix(16, 16);
-                            pix.fill(Qt::transparent);
-                            QPainter painter(&pix);
-                            painter.setPen(Qt::black);
-                            painter.setFont(QFont("Arial", 10, QFont::Bold));
-                            painter.drawText(pix.rect(), Qt::AlignCenter, item->title.left(1).toUpper());
-                            action->setIcon(QIcon(pix));
-                        }
-
-                        action->setData(QUrl(item->url));
-                        connect(action, &QAction::triggered, this, [this, item]() {
-                            m_tabWidget->setUrl(QUrl(item->url));
-                        });
-
-                        m_favoritesBar->addAction(action);
-                    }
-                }
-             }
-        };
-        // Trouver le dossier "Favoris" et afficher son contenu
-        for (FavoriteItem* child : m_favoritesRoot->children) {
-            if (child->title == "Favoris") {
-                addFavoritesToToolbar(child, m_favoritesBar);
-                break;
+    std::function<void(FavoriteItem*, QWidget*)> addFavoritesToBar;
+    addFavoritesToBar = [this, &addFavoritesToBar](FavoriteItem* item, QWidget* parent) {
+        if (item->url.isEmpty()) {
+            // C'est un dossier
+            QMenu* folderMenu = new QMenu(item->title, parent);
+            folderMenu->setIcon(QIcon(":/icons/folder.png"));
+            for (FavoriteItem* child : item->children) {
+                addFavoritesToBar(child, folderMenu);
+            }
+            if (parent == m_favoritesBar) {
+                m_favoritesBar->addAction(folderMenu->menuAction());
+            } else {
+                static_cast<QMenu*>(parent)->addMenu(folderMenu);
+            }
+        } else {
+            // C'est un favori
+            QAction* action = new QAction(item->title, parent);
+            action->setIcon(QIcon(item->iconPath.isEmpty() ? ":/icons/favicon.png" : item->iconPath));
+            action->setData(QUrl(item->url));
+            connect(action, &QAction::triggered, this, [this, url = QUrl(item->url)]() {
+                m_tabWidget->setUrl(url);
+            });
+            if (parent == m_favoritesBar) {
+                m_favoritesBar->addAction(action);
+            } else {
+                static_cast<QMenu*>(parent)->addAction(action);
             }
         }
+    };
 
+    for (FavoriteItem* item : m_favoritesRoot->children) {
+        addFavoritesToBar(item, m_favoritesBar);
+    }
+
+    // Ajouter le bouton "Voir plus" seulement s'il y a des favoris
+    if (!m_favoritesRoot->children.isEmpty()) {
+        m_moreFavoritesAction = new QAction(QIcon(":/icons/more.png"), tr("Voir plus..."), this);
+        connect(m_moreFavoritesAction, &QAction::triggered, this, &BrowserWindow::showFavoritesManager);
         m_favoritesBar->addAction(m_moreFavoritesAction);
-            qDebug() << "Mise à jour UI en" << timer.elapsed() << "ms";
-        });
+    }
 }
 
 
@@ -1455,72 +1407,74 @@ void BrowserWindow::updateFaviconForFavorite(const QUrl &url, const QString &fav
 }
 
 
-void BrowserWindow::showFavoritesManager()
-{
+void BrowserWindow::showFavoritesManager() {
     QDialog dialog(this);
-    dialog.setWindowTitle(tr("Ajouter aux favoris"));
+    dialog.setWindowTitle(tr("Gestionnaire de favoris"));
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
-    QTreeWidget* folderTree = new QTreeWidget(this); // Ajouter cette ligne
 
     QTreeWidget *tree = new QTreeWidget(&dialog);
-    tree->setHeaderLabel({tr("Dossiers")});
-    populateFolderTree(folderTree, m_favoritesRoot);
+    tree->setHeaderLabels({tr("Nom"), tr("URL")});
+    populateFavoritesTree(tree, m_favoritesRoot);
 
-    QLineEdit *nameEdit = new QLineEdit(&dialog);
-    QLineEdit *urlEdit = new QLineEdit(currentTab()->url().toString(), &dialog);
+    QPushButton *addFolderButton = new QPushButton(tr("Ajouter un dossier"), &dialog);
+    connect(addFolderButton, &QPushButton::clicked, [this, tree]() {
+        bool ok;
+        QString folderName = QInputDialog::getText(this, tr("Nouveau dossier"),
+                                                   tr("Nom du dossier:"), QLineEdit::Normal, "", &ok);
+        if (ok && !folderName.isEmpty()) {
+            addFavoriteFolder(folderName);
+            populateFavoritesTree(tree, m_favoritesRoot);
+        }
+    });
 
-    layout->addWidget(new QLabel(tr("Nom:")));
-    layout->addWidget(nameEdit);
-    layout->addWidget(new QLabel(tr("URL:")));
-    layout->addWidget(urlEdit);
-    layout->addWidget(new QLabel(tr("Dossier parent:")));
     layout->addWidget(tree);
+    layout->addWidget(addFolderButton);
 
-    QDialogButtonBox * buttonBox = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
-    layout->addWidget(buttonBox);
-
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttonBox);
 
     if (dialog.exec() == QDialog::Accepted) {
-        FavoriteItem* parentFolder = getSelectedFolder(tree);
-        addFavoriteToFolder(nameEdit->text(), urlEdit->text(), parentFolder);
+        saveFavoritesFromTree(tree);
+        loadFavoritesToBar();
     }
-
-    connect(m_moreFavoritesAction, &QAction::triggered, this, &BrowserWindow::showFavoritesManager);
 }
 
-void BrowserWindow::addFavoriteToFolder(const QString &name, const QString &url, FavoriteItem* folder)
-{
+
+void BrowserWindow::addFavoriteToFolder(const QString &name, const QString &url, FavoriteItem* folder) {
     int newId = m_database.addFavorite(name, url, "", folder ? folder->id : 0);
-    if(newId != -1) {
+    if (newId != -1) {
         FavoriteItem* newItem = new FavoriteItem(newId, name, url, "", {}, folder);
         folder->children.append(newItem);
         loadFavoritesToBar();
     }
 }
 
-void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent)
-{
+
+void BrowserWindow::populateFolderTree(QTreeWidget* tree, FavoriteItem* parent) {
     tree->clear();
     if (!parent) parent = m_favoritesRoot;
     
     std::function<void(QTreeWidgetItem*, FavoriteItem*)> addItems;
     addItems = [&](QTreeWidgetItem* parentItem, FavoriteItem* favorite) {
         for (FavoriteItem* child : favorite->children) {
-            QTreeWidgetItem* item = new QTreeWidgetItem({child->title});
-            item->setData(0, Qt::UserRole, QVariant::fromValue(child));
-            if (parentItem) {
-                parentItem->addChild(item);
-            } else {
-                tree->addTopLevelItem(item);
+            if (child->url.isEmpty()) {  // C'est un dossier
+                QTreeWidgetItem* item = new QTreeWidgetItem({child->title});
+                item->setData(0, Qt::UserRole, QVariant::fromValue(child));
+                if (parentItem) {
+                    parentItem->addChild(item);
+                } else {
+                    tree->addTopLevelItem(item);
+                }
+                addItems(item, child);
             }
-            addItems(item, child);
         }
     };
     
     addItems(nullptr, parent);
 }
+
 
 
 void BrowserWindow::saveFavoritesFromTree(QTreeWidget *tree)

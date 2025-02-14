@@ -8,6 +8,7 @@
 #include <QDropEvent>
 #include <QMenu>
 #include "browserwindow.h"
+#include "favoriteitem.h"
 
 class FavoritesManager : public QDialog
 {

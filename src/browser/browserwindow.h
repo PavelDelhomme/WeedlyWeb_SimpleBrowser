@@ -24,24 +24,13 @@
 #include "commandwidget.h"
 #include "requestinterceptor.h"
 #include "database.h"
+#include "favoritesmanager.h"
+#include "favoriteitem.h"
 
 class Browser;
 class TabWidget;
 class WebView;
-
-struct FavoriteItem {
-    int id; // <-- Ajouter ceci
-    QString title;
-    QString url;
-    QString iconPath;
-    QList<FavoriteItem*> children;
-    FavoriteItem* parent;
-    
-    // Constructeur
-    FavoriteItem(int id = -1, QString title = "", QString url = "", QString iconPath = "", 
-                 QList<FavoriteItem*> children = {}, FavoriteItem* parent = nullptr)
-        : id(id), title(title), url(url), iconPath(iconPath), children(children), parent(parent) {}
-};
+class CommandPalette;
 
 
 class BrowserWindow : public QMainWindow
@@ -84,8 +73,8 @@ private slots:
     void populateFolderTree(QTreeWidget* tree, FavoriteItem* parent);
     void handleFavoriteDrop(QDropEvent *event);
     void startDrag();
-    void processCommand(const QString &command);
     void toggleCommandWidget();
+    void onCommandPaletteCommandSelected(const QString &command);
 
 private:
     QMenu *createFileMenu(TabWidget *tabWidget);
@@ -100,7 +89,6 @@ private:
     Browser *m_browser;
     QWebEngineProfile *m_profile;
     TabWidget *m_tabWidget;
-    CommandWidget *m_commandWidget;
     QProgressBar *m_progressBar = nullptr;
     QAction *m_historyBackAction = nullptr;
     QAction *m_historyForwardAction = nullptr;
@@ -121,6 +109,7 @@ private:
     Database m_database;
     int m_draggedIndex = -1; // Ajoutez cette ligne
 
+    FavoritesManager *m_favoritesManager;
     FavoriteItem* m_favoritesRoot;
     void addFavoriteToBar(FavoriteItem* item, QWidget* parent);
     FavoriteItem* findFavoriteByUrl(const QUrl& url, FavoriteItem* root=nullptr);
@@ -162,20 +151,11 @@ private:
     void updateUrlCompleter();
 
     // Command
-    void processCVECommand(const QString &command);
-    void processRequestCommand(const QString &command);
-
-    // Command - CVEs
-    QStringList detectCVEs(const QString &html);
-    void displayCVEResults(const QStringList &cves);
+    CommandPalette *m_commandPalette = nullptr;
+    void showCommandPalette();
     
     // Command - Request
     RequestInterceptor *m_requestInterceptor;
-    void showRequestAnalyzer();
-    void sendGetRequest(const QString &url);
-    void sendPostRequest(const QString &url);
-    void handleNetworkReply(QNetworkReply *reply);
-
 };
 
 #endif // BROWSERWINDOW_H

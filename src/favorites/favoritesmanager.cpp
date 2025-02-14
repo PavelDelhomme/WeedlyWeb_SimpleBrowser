@@ -1,5 +1,6 @@
 #include "browserwindow.h"
 #include "favoritesmanager.h"
+#include "favoriteitem.h"
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QFile>
@@ -257,7 +258,7 @@ void FavoritesManager::showContextMenu(const QPoint &pos)
 }
 
 
-FavoriteItem* FavoritesManager::findFavoriteByUrl(const QUrl& url, FavoriteItem* root)
+FavoriteItem* FavoritesManager::findFavoriteByUrl(const QUrl& url, FavoriteItem* root) 
 {
     if(!root) root = m_favoritesRoot;
     
@@ -281,3 +282,19 @@ void FavoritesManager::updateTreeView(FavoriteItem* root)
     populateTree(root, m_favoritesModel->invisibleRootItem());
 }
 
+
+void FavoritesManager::populateTree(FavoriteItem* node, QStandardItem* parent)
+{
+    QStandardItem* item = new QStandardItem(node->title);
+    item->setData(QVariant::fromValue(node), Qt::UserRole);
+    
+    if (parent) {
+        parent->appendRow(item);
+    } else {
+        m_favoritesModel->appendRow(item);
+    }
+    
+    for (FavoriteItem* child : node->children) {
+        populateTree(child, item);
+    }
+}

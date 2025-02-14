@@ -30,6 +30,7 @@ set(SOURCES
     src/downloads/downloadwidget.cpp
     src/favorites/favoritesmanager.cpp
     src/utils/commandwidget.cpp
+    src/utils/commandpalette.cpp
     src/utils/cveanalyzer.cpp
     src/utils/requestinterceptor.cpp
     src/browser/certificateerrordialog.cpp

@@ -16,7 +16,8 @@ public:
     bool initDatabase();
     bool migrateFromJson();
     bool updateFavicon(int id, const QString& faviconPath);
-    QMap<QString, QVariant> getFavoriteByUrl(const QUrl& url);
+    QMap<QString, QVariant> getFavoriteByUrl(const QUrl& url) const;
+
     
     // Opération CRUD
     bool addFavorite(const QString &title, const QString &url, const QString &iconPath, int parentId = 0);
